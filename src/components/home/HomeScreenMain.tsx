@@ -150,6 +150,12 @@ export default function HomeScreenMain() {
               placeholder="Bạn đang tìm gì?"
               style={styles.searchInput}
               placeholderTextColor="#9CA3AF"
+              onSubmitEditing={(e) => {
+                const query = e.nativeEvent.text;
+                if (query.trim().length > 0) {
+                  router.push({ pathname: '/search', params: { query } });
+                }
+              }}
             />
             <TouchableOpacity style={styles.actionIcon}>
               <Mic color="#059669" size={20} />
