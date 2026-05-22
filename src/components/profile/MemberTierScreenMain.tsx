@@ -1,13 +1,14 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, HelpCircle, Medal, Gift, Clock, Percent, Truck, Cake, ChevronRight, Sparkles, Home, Map, ShoppingBag, User } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { Cake, ChevronLeft, ChevronRight, Clock, Gift, Home, Map, Medal, Percent, ShoppingBag, Sparkles, Truck, User } from 'lucide-react-native';
+import React from 'react';
+import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MemberTierScreenMain() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <LinearGradient
@@ -168,7 +169,7 @@ export default function MemberTierScreenMain() {
         </ScrollView>
 
         {/* Bottom Navigation */}
-        <View style={styles.bottomNav}>
+        <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/home')}>
             <View style={styles.navTabBox}>
               <Home color="#9CA3AF" size={24} />
@@ -507,7 +508,8 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
     alignItems: 'center',

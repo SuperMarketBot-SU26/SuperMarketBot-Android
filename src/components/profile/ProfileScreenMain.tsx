@@ -1,15 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Settings, CheckCircle2, QrCode, User, SlidersHorizontal, Medal, Clock, ShoppingBag, Leaf, PartyPopper, LogOut, Home, Map, ShoppingBag as ShoppingBagIcon } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { CheckCircle2, Clock, Home, Leaf, LogOut, Map, Medal, PartyPopper, QrCode, Settings, ShoppingBag, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreenMain() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  const handleLogout = () => {
+  const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
+
+  const confirmLogout = () => {
+    setLogoutModalVisible(false);
     router.replace('/');
   };
 
@@ -173,7 +177,7 @@ export default function ProfileScreenMain() {
 
           {/* Logout Button */}
           <Animated.View entering={FadeInUp.delay(500)} style={styles.logoutSection}>
-            <TouchableOpacity style={styles.btnLogout} onPress={handleLogout}>
+            <TouchableOpacity style={styles.btnLogout} onPress={() => setLogoutModalVisible(true)}>
               <LogOut color="#DC2626" size={20} style={{ marginRight: 8 }} />
               <Text style={styles.btnLogoutText}>Đăng xuất</Text>
             </TouchableOpacity>
@@ -182,7 +186,7 @@ export default function ProfileScreenMain() {
         </ScrollView>
 
         {/* Bottom Navigation */}
-        <View style={styles.bottomNav}>
+        <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/home')}>
             <View style={styles.navTabBox}>
               <Home color="#9CA3AF" size={24} />
@@ -207,6 +211,32 @@ export default function ProfileScreenMain() {
             </View>
           </TouchableOpacity>
         </View>
+
+        {/* Logout Confirmation Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={isLogoutModalVisible}
+          onRequestClose={() => setLogoutModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalIconBox}>
+                <LogOut color="#DC2626" size={28} />
+              </View>
+              <Text style={styles.modalTitle}>Xác nhận đăng xuất</Text>
+              <Text style={styles.modalMessage}>Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?</Text>
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setLogoutModalVisible(false)} activeOpacity={0.7}>
+                  <Text style={styles.modalBtnCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalBtnConfirm} onPress={confirmLogout} activeOpacity={0.7}>
+                  <Text style={styles.modalBtnConfirmText}>Đăng xuất</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
       </SafeAreaView>
     </LinearGradient>
@@ -479,7 +509,8 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -505,5 +536,75 @@ const styles = StyleSheet.create({
   },
   navTabBoxActive: {
     backgroundColor: '#059669',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  modalBtnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  modalBtnCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  modalBtnConfirm: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+  },
+  modalBtnConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'white',
   }
 });

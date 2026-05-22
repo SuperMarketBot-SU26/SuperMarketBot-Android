@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { AtSign, Lock, Eye, EyeOff, ArrowRight, Smile } from 'lucide-react-native';
-import Animated, { FadeInUp, FadeInRight, FadeInLeft, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
+import { ArrowRight, AtSign, Eye, EyeOff, Lock, Smile } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInLeft, FadeInRight, FadeInUp, useAnimatedStyle, useSharedValue, withSpring, Easing } from 'react-native-reanimated';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -18,11 +18,11 @@ export default function LoginForm() {
   });
 
   return (
-    <Animated.View entering={FadeInUp.delay(300).duration(800).springify()} style={styles.card}>
-      <Animated.Text entering={FadeInRight.delay(400).springify()} style={styles.cardTitle}>Chào mừng trở lại</Animated.Text>
-      <Animated.Text entering={FadeInRight.delay(450).springify()} style={styles.cardSubtitle}>Đăng nhập để tiếp tục trải nghiệm mua sắm AI</Animated.Text>
+    <Animated.View entering={FadeInUp.delay(200).duration(600).easing(Easing.out(Easing.exp))} style={styles.card}>
+      <Animated.Text entering={FadeInRight.delay(300).duration(500).easing(Easing.out(Easing.exp))} style={styles.cardTitle}>Chào mừng trở lại</Animated.Text>
+      <Animated.Text entering={FadeInRight.delay(350).duration(500).easing(Easing.out(Easing.exp))} style={styles.cardSubtitle}>Đăng nhập để tiếp tục trải nghiệm mua sắm</Animated.Text>
 
-      <Animated.View entering={FadeInLeft.delay(500).springify()} style={styles.inputGroup}>
+      <Animated.View entering={FadeInLeft.delay(400).duration(500).easing(Easing.out(Easing.exp))} style={styles.inputGroup}>
         <Text style={styles.label}>Email</Text>
         <View style={styles.inputContainer}>
           <AtSign color="#9CA3AF" size={20} style={styles.inputIcon} />
@@ -34,7 +34,7 @@ export default function LoginForm() {
         </View>
       </Animated.View>
 
-      <Animated.View entering={FadeInRight.delay(550).springify()} style={styles.inputGroup}>
+      <Animated.View entering={FadeInRight.delay(450).duration(500).easing(Easing.out(Easing.exp))} style={styles.inputGroup}>
         <View style={styles.labelRow}>
           <Text style={styles.label}>Mật khẩu</Text>
           <TouchableOpacity><Text style={styles.forgotPassword}>Quên mật khẩu?</Text></TouchableOpacity>
@@ -53,7 +53,7 @@ export default function LoginForm() {
         </View>
       </Animated.View>
 
-      <Animated.View entering={FadeInUp.delay(650).springify()}>
+      <Animated.View entering={FadeInUp.delay(500).duration(500).easing(Easing.out(Easing.exp))}>
         <AnimatedTouchableOpacity
           style={[styles.loginBtn, buttonAnimatedStyle]}
           onPressIn={() => scale.value = withSpring(0.95)}
@@ -66,7 +66,7 @@ export default function LoginForm() {
         </AnimatedTouchableOpacity>
       </Animated.View>
 
-      <Animated.View entering={FadeInUp.delay(750).springify()}>
+      <Animated.View entering={FadeInUp.delay(550).duration(500).easing(Easing.out(Easing.exp))}>
         <AnimatedTouchableOpacity
           style={styles.faceLoginBtn}
           activeOpacity={0.7}

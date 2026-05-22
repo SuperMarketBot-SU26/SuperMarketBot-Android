@@ -1,13 +1,14 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, HelpCircle, Camera, User as UserIcon, Mail, Phone, MapPin, Edit2, ArrowRight, Bot, Home, Map, ShoppingBag, User } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { ArrowRight, Camera, ChevronLeft, Edit2, Home, Mail, Map, MapPin, Phone, ShoppingBag, User, User as UserIcon } from 'lucide-react-native';
+import React from 'react';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PersonalInfoScreenMain() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <KeyboardAvoidingView
@@ -122,7 +123,7 @@ export default function PersonalInfoScreenMain() {
           </ScrollView>
 
           {/* Bottom Navigation */}
-          <View style={styles.bottomNav}>
+          <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
             <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/home')}>
               <View style={styles.navTabBox}>
                 <Home color="#9CA3AF" size={24} />
@@ -318,7 +319,8 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
     alignItems: 'center',

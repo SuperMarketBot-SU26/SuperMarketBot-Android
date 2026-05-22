@@ -1,21 +1,21 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, ZoomIn, Easing } from 'react-native-reanimated';
 
 export default function LoginHeader() {
   return (
-    <Animated.View entering={FadeInDown.delay(100).duration(800).springify()} style={styles.logoContainer}>
+    <Animated.View entering={FadeInDown.delay(100).duration(600).easing(Easing.out(Easing.exp))} style={styles.logoContainer}>
       <Animated.Image
-        entering={ZoomIn.delay(300).springify().damping(12)}
+        entering={ZoomIn.delay(200).duration(500).easing(Easing.out(Easing.back(1.5)))}
         source={{ uri: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779356175/logo_v5vc8q.png' }}
         style={styles.logoImage}
         resizeMode="contain"
       />
-      <Animated.Text entering={FadeInDown.delay(400).springify()} style={styles.brandName}>
+      <Animated.Text entering={FadeInDown.delay(300).duration(500).easing(Easing.out(Easing.exp))} style={styles.brandName}>
         <Text style={styles.brandFresh}>Smart</Text>
         <Text style={styles.brandData}>MarketBot</Text>
       </Animated.Text>
-      <Animated.Text entering={FadeInDown.delay(500).springify()} style={styles.subtitle}>
+      <Animated.Text entering={FadeInDown.delay(400).duration(500).easing(Easing.out(Easing.exp))} style={styles.subtitle}>
         Ứng dụng nâng cao trải nghiệm mua sắm của bạn
       </Animated.Text>
     </Animated.View>

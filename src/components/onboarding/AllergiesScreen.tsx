@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ArrowRight, ShieldAlert, CheckCircle2, Circle, Droplets, Fish, Leaf, Wheat, Egg, Sprout } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInUp, FadeInLeft } from 'react-native-reanimated';
@@ -17,13 +17,14 @@ const ALLERGIES = [
 export default function AllergiesScreen() {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(['2']); // Default selected for mockup
+  const insets = useSafeAreaInsets();
 
   const toggleSelection = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft color="#1F2937" size={24} />
@@ -82,7 +83,7 @@ export default function AllergiesScreen() {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
         <TouchableOpacity style={styles.nextButton} onPress={() => router.push('/onboarding/budget')}>
           <Text style={styles.nextButtonText}>Tiếp tục</Text>
           <ArrowRight color="white" size={20} />

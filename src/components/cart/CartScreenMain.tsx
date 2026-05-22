@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, ChevronLeft, Plus, Minus, Sparkles, Zap, Home, Map, ShoppingBag, User } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { Bell, Home, Map, Minus, Plus, ShoppingBag, User, Zap } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MOCK_CART = [
   {
@@ -37,6 +37,7 @@ const MOCK_CART = [
 export default function CartScreenMain() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState(MOCK_CART);
+  const insets = useSafeAreaInsets();
 
   const formatPrice = (price: number) => {
     return price.toLocaleString('vi-VN') + ' VNĐ';
@@ -151,7 +152,7 @@ export default function CartScreenMain() {
         </Animated.View>
 
         {/* Bottom Navigation */}
-        <View style={styles.bottomNav}>
+        <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/home')}>
             <View style={styles.navTabBox}>
               <Home color="#9CA3AF" size={24} />
@@ -437,7 +438,8 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
     alignItems: 'center',

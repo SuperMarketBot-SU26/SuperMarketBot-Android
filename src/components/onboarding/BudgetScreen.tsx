@@ -1,14 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, TextInput, PanResponder } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ArrowRight, Banknote, Sparkles, Zap, Leaf } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Banknote, Leaf, Sparkles, Zap } from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { PanResponder, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function BudgetScreen() {
   const router = useRouter();
   const [amount, setAmount] = useState('2500000');
-  
+  const insets = useSafeAreaInsets();
+
   const sliderWidthRef = useRef(0);
 
   const amountRef = useRef(amount);
@@ -31,11 +32,11 @@ export default function BudgetScreen() {
         if (sliderWidthRef.current > 0) {
           let newPercent = startPercentRef.current + (gestureState.dx / sliderWidthRef.current) * 100;
           newPercent = Math.min(Math.max(newPercent, 0), 100);
-          
+
           let newAmount = Math.round((newPercent / 100) * 5000000);
           // Snap to 100,000 increments for smoother UX while dragging
           newAmount = Math.round(newAmount / 100000) * 100000;
-          
+
           setAmount(newAmount.toString());
         }
       },
@@ -54,7 +55,7 @@ export default function BudgetScreen() {
   const displayM = (Number(amount) / 1000000).toFixed(1).replace('.0', '');
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft color="#1F2937" size={24} />
@@ -70,7 +71,7 @@ export default function BudgetScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.headerIcon}>
           <View style={styles.iconWrapper}>
             <Banknote color="#059669" size={28} />
@@ -79,7 +80,7 @@ export default function BudgetScreen() {
 
         <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.titleSection}>
           <Text style={styles.mainTitle}>Ngân sách mua sắm hàng tuần của bạn?</Text>
-          <Text style={styles.subtitle}>FreshData AI sẽ tối ưu hóa thực đơn dựa trên ngân sách tiết kiệm nhất cho bạn.</Text>
+          <Text style={styles.subtitle}>SmartMarketBot AI sẽ tối ưu hóa thực đơn dựa trên ngân sách tiết kiệm nhất cho bạn.</Text>
         </Animated.View>
 
         <Animated.View entering={FadeInUp.delay(300).springify()} style={styles.budgetCard}>
@@ -98,8 +99,8 @@ export default function BudgetScreen() {
 
           {/* Interactive Slider */}
           <View style={styles.sliderContainer} {...panResponder.panHandlers}>
-            <View 
-              style={styles.sliderTrack} 
+            <View
+              style={styles.sliderTrack}
               onLayout={(e) => { sliderWidthRef.current = e.nativeEvent.layout.width; }}
             >
               <View style={[styles.sliderFill, { width: `${percent}%` }]} />
@@ -144,12 +145,12 @@ export default function BudgetScreen() {
 
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
         <TouchableOpacity style={styles.nextButton} onPress={() => router.replace('/home')}>
           <Text style={styles.nextButtonText}>Hoàn tất</Text>
           <ArrowRight color="white" size={20} />
         </TouchableOpacity>
-        <Text style={styles.securityText}>Dữ liệu của bạn được bảo mật theo tiêu chuẩn FreshData GDPR.</Text>
+        <Text style={styles.securityText}>Dữ liệu của bạn được bảo mật theo tiêu chuẩn SmartMarketBot.</Text>
       </View>
     </SafeAreaView>
   );

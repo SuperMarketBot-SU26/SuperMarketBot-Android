@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInUp, Easing } from 'react-native-reanimated';
 
 import { useRouter } from 'expo-router';
 
@@ -10,7 +10,7 @@ export default function LoginFooter() {
   return (
     <>
       {/* Register Link */}
-      <Animated.View entering={FadeInUp.delay(500).duration(800)} style={styles.registerContainer}>
+      <Animated.View entering={FadeInUp.delay(600).duration(500).easing(Easing.out(Easing.exp))} style={styles.registerContainer}>
         <Text style={styles.registerText}>
           Chưa có tài khoản?{' '}
           <Text style={styles.registerLink} onPress={() => router.push('/register')}>

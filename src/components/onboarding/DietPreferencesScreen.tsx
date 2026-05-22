@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Image, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, ArrowRight, Bot, CheckCircle2, Circle, Leaf, Coffee, Sprout, Fish } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInDown, FadeInUp, useAnimatedStyle, withSpring, useSharedValue, withRepeat, withTiming, Easing } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, ArrowRight, Bot, CheckCircle2, Coffee, Fish, Leaf, Sprout } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { Easing, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
@@ -74,13 +75,14 @@ const DietOptionCard = ({ item, isSelected, toggleSelection }: any) => {
 export default function DietPreferencesScreen() {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
+  const insets = useSafeAreaInsets();
 
   const toggleSelection = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft color="#1F2937" size={24} />
@@ -130,7 +132,7 @@ export default function DietPreferencesScreen() {
       </ScrollView>
 
       {/* Sticky Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
         <View style={styles.infoRow}>
           <CheckCircle2 color="#059669" size={16} />
           <Text style={styles.infoText}>Bạn có thể thay đổi các lựa chọn này bất cứ lúc nào</Text>

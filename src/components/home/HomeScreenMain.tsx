@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, HelpCircle, Search, Mic, Camera, Star, Wallet, ShoppingBag, PieChart, User, LayoutGrid, Zap, Plus, CheckCircle2, Navigation, Map, Home } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Dimensions, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -69,8 +69,9 @@ export default function HomeScreenMain() {
   const [searchMode, setSearchMode] = useState<'personal' | 'all'>('personal');
   const [activeTab, setActiveTab] = useState('home');
   const router = useRouter();
-  const userTier = 'GOLD'; // Các hạng: BRONZE, SILVER, GOLD, PLATINUM
+  const userTier = 'PLATINUM'; // Các hạng: BRONZE, SILVER, GOLD, PLATINUM
   const tierTheme = getTierTheme(userTier);
+  const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -132,14 +133,14 @@ export default function HomeScreenMain() {
               activeOpacity={0.8}
             >
               {searchMode === 'personal' && <CheckCircle2 color="white" size={16} style={{ marginRight: 6 }} />}
-              <Text style={[styles.toggleBtnText, searchMode === 'personal' && styles.toggleBtnTextActive]}>Tìm kiếm cá nhân hóa</Text>
+              <Text style={[styles.toggleBtnText, searchMode === 'personal' && styles.toggleBtnTextActive]}>Tìm cá nhân hóa</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.toggleBtn, searchMode === 'all' && styles.toggleBtnActive]}
               onPress={() => setSearchMode('all')}
               activeOpacity={0.8}
             >
-              <Text style={[styles.toggleBtnText, searchMode === 'all' && styles.toggleBtnTextActive]}>Tìm kiếm tất cả</Text>
+              <Text style={[styles.toggleBtnText, searchMode === 'all' && styles.toggleBtnTextActive]}>Tìm tất cả</Text>
             </TouchableOpacity>
           </View>
 
@@ -306,7 +307,7 @@ export default function HomeScreenMain() {
       </ScrollView>
 
       {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('home')}>
           <View style={[styles.navTabBox, activeTab === 'home' && styles.navTabBoxActive]}>
             <Home color={activeTab === 'home' ? 'white' : '#9CA3AF'} size={24} />
@@ -917,7 +918,8 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 12,
     justifyContent: 'space-between',
     alignItems: 'center',
