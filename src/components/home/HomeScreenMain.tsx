@@ -1,19 +1,39 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
+import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
+import Animated, { FadeInDown, FadeInRight, FadeInUp, SharedTransition, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ProductService, ProductDto } from '../../services/ProductService';
+import { useIsFocused } from '@react-navigation/native';
+import * as SecureStore from 'expo-secure-store';
+import { RobotService } from '../../services/RobotService';
+import { ProfileService, ProfileDto } from '../../services/ProfileService';
+
+const getGreetingText = () => {
+  const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+  const today = new Date();
+  const dayName = dayNames[today.getDay()];
+  
+  const greetings = [
+    'vui vẻ 🥗',
+    'ngập tràn niềm vui 🎉',
+    'tràn đầy năng lượng 💪',
+    'bình an ☀️',
+    'may mắn 🍀',
+    'hạnh phúc ❤️',
+    'ấm áp 🥰'
+  ];
+  const greetingText = greetings[today.getDay()];
+  
+  return `${dayName} ${greetingText}`;
+};
 
 const { width } = Dimensions.get('window');
 
-// Data Mocks
-const PRODUCTS = [
-  { id: '1', title: 'Sữa Tươi Organic', subtitle: '98% Độ tươi mới', price: '54,000 đ', image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?q=80&w=400&auto=format&fit=crop', aiRecommend: true },
-  { id: '2', title: 'Cá Hồi Tươi Nauy', subtitle: 'Vừa nhập kho lúc 5am', price: '125,000 đ', image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?q=80&w=400&auto=format&fit=crop', aiRecommend: true },
-  { id: '3', title: 'Bơ Sáp 034', subtitle: 'Đang có deal hời', price: '45,000 đ', image: 'https://images.unsplash.com/photo-1523049673857-eb18f1d7b578?q=80&w=400&auto=format&fit=crop', aiRecommend: true },
-];
+// Data Mocks cho các phần khác (giữ nguyên AI recommend dummy)
 
 const getTierTheme = (tier: string) => {
   switch (tier) {
@@ -68,39 +88,106 @@ const getTierTheme = (tier: string) => {
 export default function HomeScreenMain() {
   const [searchMode, setSearchMode] = useState<'personal' | 'all'>('personal');
   const [activeTab, setActiveTab] = useState('home');
+  const [products, setProducts] = useState<ProductDto[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
   const router = useRouter();
-  const userTier = 'PLATINUM'; // Các hạng: BRONZE, SILVER, GOLD, PLATINUM
+  const [profile, setProfile] = useState<ProfileDto | null>(null);
+  const userTier = (profile?.membershipTier || 'MEMBER').toUpperCase();
   const tierTheme = getTierTheme(userTier);
   const insets = useSafeAreaInsets();
+  const [selectedRobotName, setSelectedRobotName] = useState<string | null>(null);
+  const [selectedRobotCode, setSelectedRobotCode] = useState<string | null>(null);
+  const [robotBattery, setRobotBattery] = useState<number | null>(null);
+  const [robotStatus, setRobotStatus] = useState<string | null>(null);
+
+  const isFocused = useIsFocused();
+
+  const fetchProfile = async () => {
+    try {
+      const data = await ProfileService.getProfile();
+      setProfile(data);
+    } catch (error) {
+      console.warn('Error fetching profile in home screen:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (isFocused) {
+      checkConnectedRobot();
+      fetchProfile();
+    }
+  }, [isFocused]);
+
+  const checkConnectedRobot = async () => {
+    try {
+      const code = await SecureStore.getItemAsync('selectedRobotCode');
+      const name = await SecureStore.getItemAsync('selectedRobotName');
+      setSelectedRobotCode(code);
+      setSelectedRobotName(name);
+
+      if (code) {
+        // Fetch current robot status to get latest battery and status
+        const robots = await RobotService.getRobots();
+        const curRobot = robots.find(r => r.robotCode === code);
+        if (curRobot) {
+          setRobotBattery(curRobot.batteryPct);
+          setRobotStatus(curRobot.status);
+        }
+      } else {
+        setRobotBattery(null);
+        setRobotStatus(null);
+      }
+    } catch (e) {
+      console.warn('Error checking connected robot:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      setLoadingProducts(true);
+      const data = await ProductService.getProducts();
+      setProducts(data);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
         {/* Header */}
-        <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
+        <View style={styles.header}>
           <TouchableOpacity style={styles.userInfo} onPress={() => router.push('/profile')}>
             <View style={styles.avatarContainer}>
-              <Image source={{ uri: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }} style={styles.avatar} />
+              <Image source={{ uri: profile?.facePath || 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }} style={styles.avatar} />
               <View style={[styles.badge, { backgroundColor: tierTheme.badgeBg }]}>
                 <Text style={styles.badgeText}>{tierTheme.badgeText}</Text>
               </View>
             </View>
             <View style={styles.greetingContainer}>
-              <Text style={styles.greetingText}>Chào Duy!</Text>
-              <Text style={styles.subGreetingText}>Thứ 3 vui vẻ 🥗</Text>
+              <Text style={styles.greetingText}>Chào {profile?.fullName ? profile.fullName.split(' ').pop() : 'bạn'}!</Text>
+              <Text style={styles.subGreetingText}>{getGreetingText()}</Text>
             </View>
           </TouchableOpacity>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/notifications')}>
-              <Bell color="#4B5563" size={22} />
-              <View style={styles.notificationDot} />
-            </TouchableOpacity>
+            <Animated.View style={styles.iconButton} sharedTransitionTag="shared-bell-icon">
+              <TouchableOpacity style={{ flex: 1, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }} onPress={() => router.push('/notifications')}>
+                <Bell color="#4B5563" size={22} />
+                <View style={styles.notificationDot} />
+              </TouchableOpacity>
+            </Animated.View>
             <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/profile')}>
               <User color="#4B5563" size={22} />
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
 
         {/* Summary Cards */}
         <Animated.View entering={FadeInDown.delay(200)} style={styles.summaryContainer}>
@@ -110,7 +197,9 @@ export default function HomeScreenMain() {
             </View>
             <View>
               <Text style={styles.summaryLabel}>Điểm tích lũy</Text>
-              <Text style={styles.summaryValue}>2,450</Text>
+              <Text style={styles.summaryValue}>
+                {profile?.totalPoints !== undefined ? profile.totalPoints.toLocaleString('vi-VN') : '0'}
+              </Text>
             </View>
           </View>
           <View style={styles.summaryCard}>
@@ -153,7 +242,7 @@ export default function HomeScreenMain() {
               onSubmitEditing={(e) => {
                 const query = e.nativeEvent.text;
                 if (query.trim().length > 0) {
-                  router.push({ pathname: '/search', params: { query } });
+                  router.push({ pathname: '/search', params: { query, mode: searchMode } });
                 }
               }}
             />
@@ -186,7 +275,7 @@ export default function HomeScreenMain() {
               <View style={styles.smartCardFooter}>
                 <Text style={styles.smartCardDesc}>Thực đơn lành mạnh cho 4 người</Text>
                 <View style={styles.smartCardActions}>
-                  <TouchableOpacity style={styles.btnPrimary}>
+                  <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/robots')}>
                     <Text style={styles.btnPrimaryText}>Xem lộ trình</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.btnSecondary}>
@@ -275,29 +364,41 @@ export default function HomeScreenMain() {
           </View>
 
           <View style={styles.productGrid}>
-            {PRODUCTS.map(product => (
-              <View key={product.id} style={styles.productCard}>
-                <View style={styles.productImageContainer}>
-                  <Image source={{ uri: product.image }} style={styles.productImage} />
-                  {product.aiRecommend && (
+            {loadingProducts ? (
+              <ActivityIndicator size="large" color="#059669" style={{ marginVertical: 20 }} />
+            ) : products.length === 0 ? (
+              <Text style={{ textAlign: 'center', marginVertical: 20, color: '#6B7280' }}>Không có sản phẩm nào</Text>
+            ) : (
+              products.map(product => (
+                <TouchableOpacity 
+                  key={product.productId} 
+                  style={styles.productCard}
+                  activeOpacity={0.8}
+                  onPress={() => router.push({ pathname: '/product', params: { id: product.productId } })}
+                >
+                  <View style={styles.productImageContainer}>
+                    <Image 
+                      source={product.imageUrl ? { uri: product.imageUrl } : { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop' }} 
+                      style={styles.productImage} 
+                    />
                     <View style={styles.aiRecommendBadge}>
                       <Zap color="white" size={10} fill="white" style={{ marginRight: 4 }} />
                       <Text style={styles.aiRecommendText}>AI Đề xuất</Text>
                     </View>
-                  )}
-                </View>
-                <View style={styles.productInfo}>
-                  <Text style={styles.productTitle} numberOfLines={1}>{product.title}</Text>
-                  <Text style={styles.productSubtitle}>{product.subtitle}</Text>
-                  <View style={styles.productPriceRow}>
-                    <Text style={styles.productPrice}>{product.price}</Text>
-                    <TouchableOpacity style={styles.addButton}>
-                      <Plus color="white" size={16} />
-                    </TouchableOpacity>
                   </View>
-                </View>
-              </View>
-            ))}
+                  <View style={styles.productInfo}>
+                    <Text style={styles.productTitle} numberOfLines={1}>{product.productName}</Text>
+                    <Text style={styles.productSubtitle}>Trạng thái: {product.status}</Text>
+                    <View style={styles.productPriceRow}>
+                      <Text style={styles.productPrice}>{product.unitPrice.toLocaleString('vi-VN')} đ</Text>
+                      <TouchableOpacity style={styles.addButton}>
+                        <Plus color="white" size={16} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
 
             {/* View More Card */}
             <TouchableOpacity style={styles.viewMoreCard} activeOpacity={0.8}>
@@ -320,7 +421,7 @@ export default function HomeScreenMain() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('route')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/robots')}>
           <View style={[styles.navTabBox, activeTab === 'route' && styles.navTabBoxActive]}>
             <Map color={activeTab === 'route' ? 'white' : '#9CA3AF'} size={24} />
           </View>
@@ -417,8 +518,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    // shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
     position: 'relative',
   },
@@ -955,5 +1056,102 @@ const styles = StyleSheet.create({
   },
   navTabBoxActive: {
     backgroundColor: '#059669',
+  },
+  robotWidgetContainer: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
+  robotWidget: {
+    backgroundColor: 'white',
+    borderRadius: 18,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1.5,
+  },
+  robotWidgetConnected: {
+    borderColor: '#D1FAE5',
+    backgroundColor: '#F0FDF4',
+  },
+  robotWidgetDisconnected: {
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    backgroundColor: 'white',
+  },
+  robotWidgetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  robotIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  robotWidgetInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  robotWidgetLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#6B7280',
+    letterSpacing: 0.5,
+  },
+  robotWidgetValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 2,
+  },
+  robotMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  batteryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  batteryText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  statusOnlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusOnlineText: {
+    color: '#065F46',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  pulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginRight: 4,
+  },
+  connectLink: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  connectLinkText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '700',
   }
 });

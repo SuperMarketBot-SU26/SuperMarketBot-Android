@@ -1,16 +1,82 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { CheckCircle2, Clock, Home, Leaf, LogOut, Map, Medal, PartyPopper, QrCode, Settings, ShoppingBag, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ProfileService, ProfileDto } from '../../services/ProfileService';
+
+const getTierTheme = (tier: string) => {
+  const t = tier ? tier.toLowerCase() : '';
+  if (t.includes('gold') || t.includes('vàng')) {
+    return {
+      colors: ['#FEF3C7', '#F59E0B'] as const,
+      title: 'Thẻ thành viên Gold',
+      superTitle: 'THÀNH VIÊN VÀNG',
+      textColor: '#78350F',
+      subColor: '#B45309',
+    };
+  }
+  if (t.includes('platinum') || t.includes('bạch kim')) {
+    return {
+      colors: ['#E0F2FE', '#0284C7'] as const,
+      title: 'Thẻ thành viên Platinum',
+      superTitle: 'THÀNH VIÊN BẠCH KIM',
+      textColor: '#FFFFFF',
+      subColor: '#E0F2FE',
+    };
+  }
+  if (t.includes('silver') || t.includes('bạc')) {
+    return {
+      colors: ['#F1F5F9', '#94A3B8'] as const,
+      title: 'Thẻ thành viên Silver',
+      superTitle: 'THÀNH VIÊN BẠC',
+      textColor: '#1E293B',
+      subColor: '#475569',
+    };
+  }
+  // Bronze / Đồng / default
+  return {
+    colors: ['#FFEDD5', '#EA580C'] as const,
+    title: 'Thẻ thành viên Bronze',
+    superTitle: 'THÀNH VIÊN ĐỒNG',
+    textColor: '#78350F',
+    subColor: '#B45309',
+  };
+};
 
 export default function ProfileScreenMain() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [profile, setProfile] = useState<ProfileDto | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const fetchProfile = async () => {
+        try {
+          const data = await ProfileService.getProfile();
+          if (isMounted) {
+            setProfile(data);
+          }
+        } catch (error) {
+          console.error('Failed to load profile in ProfileScreen', error);
+        } finally {
+          if (isMounted) {
+            setIsLoadingProfile(false);
+          }
+        }
+      };
+      fetchProfile();
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
 
   const confirmLogout = () => {
     setLogoutModalVisible(false);
@@ -18,10 +84,11 @@ export default function ProfileScreenMain() {
   };
 
   return (
-    <LinearGradient
-      colors={['#F8FAFC', '#F8FAFC']}
-      style={styles.container}
-    >
+    <>
+      <LinearGradient
+        colors={['#F8FAFC', '#F8FAFC']}
+        style={styles.container}
+      >
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
@@ -36,52 +103,60 @@ export default function ProfileScreenMain() {
           {/* User Info */}
           <Animated.View entering={FadeInDown.delay(100)} style={styles.userInfoSection}>
             <View style={styles.avatarContainer}>
-              <Image source={{ uri: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }} style={styles.avatar} />
+              <Image source={{ uri: profile?.facePath || 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }} style={styles.avatar} />
               <View style={styles.verifiedBadge}>
                 <CheckCircle2 color="white" size={12} fill="#16A34A" />
               </View>
             </View>
             <View style={styles.userDetails}>
-              <Text style={styles.userName}>Duy Nguyễn</Text>
+              <Text style={styles.userName}>{profile?.fullName || 'Đang tải...'}</Text>
               <View style={styles.userTierRow}>
                 <Medal color="#059669" size={14} />
-                <Text style={styles.userTierText}>Vàng (Gold)</Text>
+                <Text style={styles.userTierText}>{profile?.membershipTier || 'Đang tải...'}</Text>
               </View>
             </View>
           </Animated.View>
 
-          {/* Platinum Card */}
+          {/* Membership Card */}
           <Animated.View entering={FadeInDown.delay(200)}>
-            <LinearGradient
-              colors={['#F1F5F9', '#F8FAFC']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.membershipCard}
-            >
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardSuperTitle}>THÀNH VIÊN CAO CẤP</Text>
-                  <Text style={styles.cardTitle}>Thẻ thành viên Platinum</Text>
-                </View>
-                <View style={styles.qrIconBox}>
-                  <QrCode color="#6B7280" size={24} />
-                </View>
-              </View>
+            {(() => {
+              const theme = getTierTheme(profile?.membershipTier || '');
+              return (
+                <LinearGradient
+                  colors={theme.colors as unknown as [string, string]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.membershipCard, { borderColor: 'transparent' }]}
+                >
+                  <View style={styles.cardHeader}>
+                    <View>
+                      <Text style={[styles.cardSuperTitle, { color: theme.textColor, opacity: 0.8 }]}>{theme.superTitle}</Text>
+                      <Text style={[styles.cardTitle, { color: theme.textColor, fontWeight: '700' }]}>{theme.title}</Text>
+                    </View>
+                    <View style={styles.qrIconBox}>
+                      <QrCode color={theme.textColor} size={24} />
+                    </View>
+                  </View>
 
-              <View style={styles.cardPointsRow}>
-                <View>
-                  <Text style={styles.pointsLabel}>Điểm tích lũy hiện tại</Text>
-                  <Text style={styles.pointsValue}>1.650 <Text style={styles.pointsUnit}>điểm</Text></Text>
-                </View>
-              </View>
+                  <View style={styles.cardPointsRow}>
+                    <View>
+                      <Text style={[styles.pointsLabel, { color: theme.textColor, opacity: 0.7 }]}>Điểm tích lũy hiện tại</Text>
+                      <Text style={[styles.pointsValue, { color: theme.textColor }]}>
+                        {profile?.totalPoints !== undefined ? profile.totalPoints.toLocaleString('vi-VN') : '0'}{' '}
+                        <Text style={[styles.pointsUnit, { color: theme.textColor }]}>điểm</Text>
+                      </Text>
+                    </View>
+                  </View>
 
-              <View style={styles.cardFooter}>
-                <Text style={styles.expiryText}>Hết hạn: 31/12/2024</Text>
-                <TouchableOpacity style={styles.btnRedeem}>
-                  <Text style={styles.btnRedeemText}>Đổi thưởng</Text>
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
+                  <View style={styles.cardFooter}>
+                    <Text style={[styles.expiryText, { color: theme.textColor, opacity: 0.6 }]}>Hết hạn: 31/12/2026</Text>
+                    <TouchableOpacity style={[styles.btnRedeem, { backgroundColor: theme.textColor }]}>
+                      <Text style={[styles.btnRedeemText, { color: theme.textColor === '#FFFFFF' ? '#006064' : '#FFFFFF' }]}>Đổi thưởng</Text>
+                    </TouchableOpacity>
+                  </View>
+                </LinearGradient>
+              );
+            })()}
           </Animated.View>
 
           {/* Account Menu */}
@@ -212,34 +287,35 @@ export default function ProfileScreenMain() {
           </TouchableOpacity>
         </View>
 
-        {/* Logout Confirmation Modal */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={isLogoutModalVisible}
-          onRequestClose={() => setLogoutModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalIconBox}>
-                <LogOut color="#DC2626" size={28} />
-              </View>
-              <Text style={styles.modalTitle}>Xác nhận đăng xuất</Text>
-              <Text style={styles.modalMessage}>Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?</Text>
-              <View style={styles.modalActionRow}>
-                <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setLogoutModalVisible(false)} activeOpacity={0.7}>
-                  <Text style={styles.modalBtnCancelText}>Hủy</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalBtnConfirm} onPress={confirmLogout} activeOpacity={0.7}>
-                  <Text style={styles.modalBtnConfirmText}>Đăng xuất</Text>
-                </TouchableOpacity>
-              </View>
+      </SafeAreaView>
+      </LinearGradient>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isLogoutModalVisible}
+        onRequestClose={() => setLogoutModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconBox}>
+              <LogOut color="#DC2626" size={28} />
+            </View>
+            <Text style={styles.modalTitle}>Xác nhận đăng xuất</Text>
+            <Text style={styles.modalMessage}>Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?</Text>
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setLogoutModalVisible(false)} activeOpacity={0.7}>
+                <Text style={styles.modalBtnCancelText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnConfirm} onPress={confirmLogout} activeOpacity={0.7}>
+                <Text style={styles.modalBtnConfirmText}>Đăng xuất</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-
-      </SafeAreaView>
-    </LinearGradient>
+        </View>
+      </Modal>
+    </>
   );
 }
 

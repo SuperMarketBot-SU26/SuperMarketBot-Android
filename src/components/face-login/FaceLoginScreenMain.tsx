@@ -1,108 +1,265 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, ScanFace, KeyRound } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInUp, withRepeat, withSequence, withTiming, useSharedValue, useAnimatedStyle, Easing } from 'react-native-reanimated';
-import { useCameraPermissions, CameraView } from 'expo-camera';
+import { CheckCircle, ChevronLeft, KeyRound, XCircle } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Dimensions,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import Animated, {
+  Easing,
+  FadeInDown, FadeInUp,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat, withSequence, withTiming,
+} from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
+import { AuthService } from '../../services/AuthService';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const OVAL_W = SCREEN_W * 0.62;
+const OVAL_H = OVAL_W * 1.28;
+
+// ─── Scan Line ────────────────────────────────────────────────────────────────
+function ScanLine({ active, color }: { active: boolean; color: string }) {
+  const y = useSharedValue(0);
+  useEffect(() => {
+    if (active) {
+      y.value = withRepeat(
+        withSequence(
+          withTiming(OVAL_H - 24, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+        ), -1, true,
+      );
+    } else {
+      cancelAnimation(y);
+      y.value = 0;
+    }
+  }, [active]);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  if (!active) return null;
+  return (
+    <Animated.View style={[styles.scanLine, { backgroundColor: color, shadowColor: color }, style]} pointerEvents="none" />
+  );
+}
+
+// ─── Pulsing ring ─────────────────────────────────────────────────────────────
+function PulseRing({ color, active }: { color: string; active: boolean }) {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0.6);
+  useEffect(() => {
+    if (active) {
+      scale.value = withRepeat(withSequence(
+        withTiming(1.06, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+      ), -1, true);
+      opacity.value = withRepeat(withSequence(
+        withTiming(1, { duration: 900 }),
+        withTiming(0.5, { duration: 900 }),
+      ), -1, true);
+    } else {
+      cancelAnimation(scale);
+      cancelAnimation(opacity);
+      scale.value = withTiming(1);
+      opacity.value = withTiming(0.6);
+    }
+  }, [active]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+    borderColor: color,
+  }));
+  return <Animated.View style={[styles.pulseRing, style]} pointerEvents="none" />;
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+type Status = 'idle' | 'scanning' | 'processing' | 'success' | 'fail';
 
 export default function FaceLoginScreenMain() {
   const router = useRouter();
+  const { login } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
-  const scanLineY = useSharedValue(0);
+  const [status, setStatus] = useState<Status>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const cameraRef = useRef<CameraView>(null);
 
-  useEffect(() => {
-    if (!permission?.granted) {
-      requestPermission();
-    }
-  }, [permission]);
+  // Soft white flash effect
+  const flashOpacity = useSharedValue(0);
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flashOpacity.value }));
 
-  useEffect(() => {
-    // Scan line animation
-    scanLineY.value = withRepeat(
-      withSequence(
-        withTiming(150, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      true
-    );
+  const captureTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopTimers = useCallback(() => {
+    if (captureTimer.current) { clearTimeout(captureTimer.current); captureTimer.current = null; }
+    if (retryTimer.current) { clearTimeout(retryTimer.current); retryTimer.current = null; }
   }, []);
 
-  const animatedScanLineStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateY: scanLineY.value }]
+  const startCapture = useCallback((delay = 0) => {
+    const run = () => {
+      setStatus('scanning');
+      captureTimer.current = setTimeout(() => {
+        captureTimer.current = null;
+        doCapture();
+      }, 2000);
     };
-  });
+    if (delay > 0) { retryTimer.current = setTimeout(run, delay); } else { run(); }
+  }, []);
+
+  const doCapture = async () => {
+    if (!cameraRef.current) return;
+    setStatus('processing');
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.7,
+        shutterSound: false,
+      });
+      if (!photo?.base64) throw new Error('Không thể chụp ảnh');
+
+      const data = await AuthService.loginFace(photo.base64);
+      if (!data.success || !data.token) {
+        throw new Error(data.message || 'Không nhận diện được khuôn mặt');
+      }
+
+      const roles: string[] = data.token?.roles || [];
+      if (!roles.includes('Member')) {
+        throw new Error('Tài khoản không có quyền truy cập ứng dụng');
+      }
+
+      await login(data.token.accessToken, {
+        userId: data.token.userId,
+        email: data.token.email,
+        fullName: data.token.fullName,
+        roles: data.token.roles,
+      });
+
+      // Soft white flash — nhẹ nhàng như AI scan
+      flashOpacity.value = withSequence(
+        withTiming(0.55, { duration: 100, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 650, easing: Easing.in(Easing.quad) }),
+      );
+      setStatus('success');
+      setTimeout(() => router.replace('/home'), 1800);
+
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Thử lại nhé');
+      setStatus('fail');
+      startCapture(4000);
+    }
+  };
+
+  useEffect(() => {
+    if (permission?.granted && status === 'idle') {
+      const t = setTimeout(() => startCapture(), 800);
+      return () => clearTimeout(t);
+    }
+  }, [permission, status]);
+
+  useEffect(() => {
+    if (!permission?.granted) requestPermission();
+  }, [permission]);
+
+  useEffect(() => () => stopTimers(), []);
+
+  const frameColor = status === 'success' ? '#22C55E'
+    : status === 'fail' ? '#EF4444'
+      : status === 'processing' ? '#F59E0B'
+        : '#22C55E';
+
+  const statusLabel = status === 'idle' ? 'Chuẩn bị camera...'
+    : status === 'scanning' ? 'Đang nhận diện khuôn mặt...'
+      : status === 'processing' ? 'Đang xác thực...'
+        : status === 'success' ? 'Nhận diện thành công!'
+          : errorMsg || 'Thử lại...';
 
   return (
-    <LinearGradient colors={['#E8F5E9', '#F8FAFC', '#FFFFFF']} style={styles.container}>
+    <LinearGradient colors={['#0F1923', '#1A2E1F', '#0F1923']} style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
 
-        <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ChevronLeft color="#1F2937" size={28} />
+        {/* Header */}
+        <Animated.View entering={FadeInDown.duration(500)} style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ChevronLeft color="white" size={26} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Đăng nhập bằng khuôn mặt</Text>
+          <Text style={styles.headerTitle}>Đăng nhập khuôn mặt</Text>
           <View style={{ width: 44 }} />
-        </View>
+        </Animated.View>
 
+        {/* Content */}
         <View style={styles.content}>
-          {/* Scanner Area */}
-          <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.scannerContainer}>
-            <View style={styles.scannerBox}>
+          <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.ovalArea}>
 
-              {/* Brackets */}
-              <View style={[styles.bracket, styles.bracketTL]} />
-              <View style={[styles.bracket, styles.bracketTR]} />
-              <View style={[styles.bracket, styles.bracketBL]} />
-              <View style={[styles.bracket, styles.bracketBR]} />
+            {/* Pulse ring */}
+            <PulseRing color={frameColor} active={status === 'scanning'} />
 
-              {/* Camera Preview or Placeholder */}
-              <View style={styles.cameraFrame}>
+            {/* Oval camera */}
+            <View style={[styles.ovalContainer, { borderColor: frameColor }]}>
+              <View style={styles.cameraOval}>
                 {permission?.granted ? (
-                  <CameraView style={styles.camera} facing="front" />
+                  <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="front" />
                 ) : (
-                  <View style={styles.cameraPlaceholder} />
+                  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#111' }]} />
+                )}
+                <ScanLine active={status === 'scanning'} color={frameColor} />
+
+                {status === 'success' && (
+                  <View style={[styles.resultOverlay, { backgroundColor: 'rgba(34,197,94,0.35)' }]}>
+                    <CheckCircle color="#22C55E" size={80} strokeWidth={1.5} />
+                  </View>
+                )}
+                {status === 'fail' && (
+                  <View style={[styles.resultOverlay, { backgroundColor: 'rgba(239,68,68,0.3)' }]}>
+                    <XCircle color="#EF4444" size={80} strokeWidth={1.5} />
+                  </View>
                 )}
 
-                <View style={styles.faceOverlay}>
-                  <ScanFace color="#86EFAC" size={120} strokeWidth={1} />
-                </View>
-
-                {/* Animated Scan Line */}
-                <Animated.View style={[styles.scanLine, animatedScanLineStyle]} />
+                {/* Soft white flash overlay */}
+                <Animated.View
+                  style={[
+                    StyleSheet.absoluteFillObject,
+                    { backgroundColor: 'white', borderRadius: OVAL_W / 2 },
+                    flashStyle,
+                  ]}
+                  pointerEvents="none"
+                />
               </View>
+
+              {/* Corner brackets */}
+              {(['TL', 'TR', 'BL', 'BR'] as const).map(pos => (
+                <View key={pos} style={[styles.corner, styles[`corner${pos}`], { borderColor: frameColor }]} />
+              ))}
             </View>
+
           </Animated.View>
 
-          {/* Status Text */}
-          <Animated.View entering={FadeInUp.delay(400).springify()} style={styles.statusContainer}>
-            <View style={styles.statusDotRow}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusTitle}>Đang nhận diện...</Text>
-            </View>
-            <Text style={styles.statusSubtitle}>Vui lòng giữ khuôn mặt trong khung hình</Text>
+          {/* Status label */}
+          <Animated.View entering={FadeInUp.delay(300).springify()} style={styles.statusBox}>
+            <View style={[styles.statusDot, { backgroundColor: frameColor }]} />
+            <Text style={[styles.statusText, { color: frameColor }]}>{statusLabel}</Text>
           </Animated.View>
 
-          {/* Buttons */}
-          <Animated.View entering={FadeInUp.delay(600).springify()} style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
-              <Text style={styles.cancelButtonText}>Hủy bỏ</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.passwordButton} onPress={() => router.back()}>
-              <KeyRound color="#166534" size={20} style={{ marginRight: 8 }} />
-              <Text style={styles.passwordButtonText}>Sử dụng mật khẩu</Text>
-            </TouchableOpacity>
-          </Animated.View>
+          {(status === 'scanning' || status === 'idle') && (
+            <Animated.Text entering={FadeInUp.delay(400)} style={styles.hint}>
+              Nhìn thẳng vào camera · Giữ điện thoại ngang tầm mắt
+            </Animated.Text>
+          )}
         </View>
 
         {/* Footer */}
-        <Animated.View entering={FadeInUp.delay(800).springify()} style={styles.footerContainer}>
-          <Text style={styles.footerText}>Bảo mật bởi </Text>
-          <Text style={styles.footerBrand}>SmartMarketBot AI</Text>
+        <Animated.View entering={FadeInUp.delay(500)} style={styles.footer}>
+          <TouchableOpacity style={styles.altBtn} onPress={() => { stopTimers(); router.back(); }}>
+            <KeyRound color="#9CA3AF" size={18} style={{ marginRight: 8 }} />
+            <Text style={styles.altBtnText}>Sử dụng mật khẩu</Text>
+          </TouchableOpacity>
+          <Text style={styles.footerSecure}>🔒 Bảo mật bởi SmartMarketBot AI</Text>
         </Animated.View>
 
       </SafeAreaView>
@@ -113,172 +270,70 @@ export default function FaceLoginScreenMain() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
-  topBar: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? 20 : 0,
-    marginBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 16 : 0,
+    paddingBottom: 8,
   },
-  backButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: 'white',
-    borderRadius: 22,
+  backBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  headerTitle: { color: 'white', fontSize: 17, fontWeight: '700' },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  ovalArea: {
+    width: OVAL_W + 48,
+    height: OVAL_H + 48,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: 36,
   },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
+  pulseRing: {
+    position: 'absolute',
+    width: OVAL_W + 24,
+    height: OVAL_H + 24,
+    borderRadius: (OVAL_W + 24) / 2,
+    borderWidth: 2,
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  scannerContainer: {
-    marginBottom: 32,
-  },
-  scannerBox: {
-    width: 260,
-    height: 260,
-    backgroundColor: 'white',
-    borderRadius: 40,
-    padding: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#22C55E',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 10,
+  ovalContainer: {
+    width: OVAL_W, height: OVAL_H,
+    borderRadius: OVAL_W / 2,
+    borderWidth: 2.5,
+    overflow: 'visible',
     position: 'relative',
   },
-  cameraFrame: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 20,
+  cameraOval: {
+    width: '100%', height: '100%',
+    borderRadius: OVAL_W / 2,
     overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#F0FDF4',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  camera: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  cameraPlaceholder: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#F0FDF4',
-  },
-  faceOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.6,
+    backgroundColor: '#111',
   },
   scanLine: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    height: 3,
-    backgroundColor: '#22C55E',
-    shadowColor: '#22C55E',
+    position: 'absolute', left: 20, right: 20, top: 10,
+    height: 2, borderRadius: 2,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 5,
-    borderRadius: 2,
+    shadowOpacity: 0.9, shadowRadius: 8, elevation: 5,
   },
-  bracket: {
-    position: 'absolute',
-    width: 40,
-    height: 40,
-    borderColor: '#22C55E',
+  corner: { position: 'absolute', width: 24, height: 24, borderWidth: 3, zIndex: 10 },
+  cornerTL: { top: -6, left: -6, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 8 },
+  cornerTR: { top: -6, right: -6, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 8 },
+  cornerBL: { bottom: -6, left: -6, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 8 },
+  cornerBR: { bottom: -6, right: -6, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 8 },
+  resultOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  statusBox: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusText: { fontSize: 15, fontWeight: '600' },
+  hint: { color: '#6B7280', fontSize: 13, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24 },
+  footer: { alignItems: 'center', paddingBottom: 32, gap: 14 },
+  altBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 24,
+    borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
-  bracketTL: { top: 24, left: 24, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 16 },
-  bracketTR: { top: 24, right: 24, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 16 },
-  bracketBL: { bottom: 24, left: 24, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 16 },
-  bracketBR: { bottom: 24, right: 24, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 16 },
-
-  statusContainer: {
-    alignItems: 'center',
-    marginBottom: 48,
-  },
-  statusDotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#22C55E',
-    marginRight: 8,
-  },
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  statusSubtitle: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  buttonContainer: {
-    width: '100%',
-    gap: 16,
-  },
-  cancelButton: {
-    backgroundColor: '#166534',
-    height: 54,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  passwordButton: {
-    backgroundColor: 'white',
-    height: 54,
-    borderRadius: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  passwordButtonText: {
-    color: '#166534',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  footerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingBottom: 24,
-  },
-  footerText: {
-    color: '#9CA3AF',
-    fontSize: 12,
-  },
-  footerBrand: {
-    color: '#166534',
-    fontSize: 12,
-    fontWeight: '700',
-  }
+  altBtnText: { color: '#9CA3AF', fontSize: 15, fontWeight: '600' },
+  footerSecure: { color: 'rgba(255,255,255,0.25)', fontSize: 12 },
 });

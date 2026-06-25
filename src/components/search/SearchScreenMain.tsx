@@ -1,9 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, ArrowRight, FileText, Map, Plus, ShoppingBag, Star, User, Zap } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
+import { SearchService, SearchResultItemDto } from '../../services/SearchService';
 
 const { width } = Dimensions.get('window');
 
@@ -13,7 +16,7 @@ const SEARCH_RESULTS = [
   {
     id: '1',
     title: 'Cá Basa Phi Lê CP 500g',
-    image: 'https://images.unsplash.com/photo-1599084993091-1cb5c0721cc6?q=80&w=400&auto=format&fit=crop', // Placeholder for fish
+    image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363232/C%C3%A1_H%E1%BB%93i_qp98h1.jpg',
     tags: [{ text: 'ĐỀ XUẤT', type: 'suggest' }, { text: 'GIẢM GIÁ', type: 'discount' }],
     rating: 4.8,
     reviews: 130,
@@ -69,11 +72,47 @@ const AI_SUGGESTIONS = [
 
 export default function SearchScreenMain() {
   const router = useRouter();
-  const { query } = useLocalSearchParams();
+  const { query, mode } = useLocalSearchParams();
   const searchQuery = query || 'Cá basa';
   const insets = useSafeAreaInsets();
+  const auth = useAuth();
   const [activeFilter, setActiveFilter] = useState('Tất cả sản phẩm');
   const [cartCount, setCartCount] = useState(0);
+
+  const [results, setResults] = useState<SearchResultItemDto[]>([]);
+  const [aiRanked, setAiRanked] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const performSearch = async () => {
+      console.log(`[SearchScreenMain] Bắt đầu tìm kiếm với Query: "${searchQuery}", Mode: "${mode}", MemberId: ${auth?.user?.userId || 'N/A'}`);
+      setLoading(true);
+      setError(null);
+      try {
+        const isPersonal = mode === 'personal';
+        const searchResults = await SearchService.search({
+          q: searchQuery as string,
+          memberId: isPersonal ? auth?.user?.userId : undefined,
+          useAi: isPersonal,
+        });
+        
+        console.log('[SearchScreenMain] Dữ liệu trả về từ API:', JSON.stringify(searchResults, null, 2));
+
+        setResults(searchResults.results || []);
+        setAiRanked(searchResults.aiRanked || false);
+        setAiExplanation(searchResults.aiExplanation || null);
+      } catch (err: any) {
+        console.error('[SearchScreenMain] Lỗi tìm kiếm:', err);
+        setError(err.message || 'Có lỗi xảy ra khi tìm kiếm');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    performSearch();
+  }, [searchQuery, mode, auth?.user?.userId]);
 
   const getTagStyle = (type: string) => {
     switch (type) {
@@ -85,6 +124,35 @@ export default function SearchScreenMain() {
     }
   };
 
+  const mappedResults = results.map((item) => {
+    const tags: { text: string; type: string }[] = [];
+    if (item.healthTags && item.healthTags.length > 0) {
+      item.healthTags.slice(0, 2).forEach((t) => tags.push({ text: t.toUpperCase(), type: 'organic' }));
+    }
+    if (item.promotionPrice && item.promotionPrice < item.unitPrice) {
+      tags.push({ text: 'GIẢM GIÁ', type: 'discount' });
+    }
+    if (tags.length === 0) {
+      tags.push({ text: item.status === 'instock' ? 'CÒN HÀNG' : 'HẾT HÀNG', type: 'popular' });
+    }
+
+    const price = item.promotionPrice !== null && item.promotionPrice !== undefined
+      ? `${item.promotionPrice.toLocaleString('vi-VN')}đ`
+      : `${item.unitPrice.toLocaleString('vi-VN')}đ`;
+
+    const fallbackImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop';
+    
+    return {
+      id: item.productId.toString(),
+      title: item.productName,
+      image: item.imageUrl || fallbackImage,
+      tags,
+      rating: 4.8,
+      reviews: Math.floor(Math.random() * 80) + 20,
+      price,
+    };
+  });
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -92,7 +160,9 @@ export default function SearchScreenMain() {
           <ArrowLeft color="#059669" size={24} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerSubtitle}>NGUYÊN LIỆU CHỌN</Text>
+          <Text style={styles.headerSubtitle}>
+            {mode === 'personal' ? 'TÌM KIẾM CÁ NHÂN HÓA' : 'TÌM KIẾM TẤT CẢ'}
+          </Text>
           <Text style={styles.headerTitle}>{searchQuery}</Text>
         </View>
         <TouchableOpacity style={styles.cartButton} onPress={() => router.push('/cart')}>
@@ -121,48 +191,90 @@ export default function SearchScreenMain() {
           </ScrollView>
         </Animated.View>
 
-        {/* Results Info */}
-        <Animated.View entering={FadeInDown.delay(150)} style={styles.resultsInfo}>
-          <Text style={styles.resultsTitle}>Kết quả phù hợp</Text>
-          <Text style={styles.resultsCount}>{SEARCH_RESULTS.length} sản phẩm</Text>
-        </Animated.View>
-
-        {/* Product List */}
-        <View style={styles.productList}>
-          {SEARCH_RESULTS.map((product, index) => (
-            <Animated.View key={product.id} entering={FadeInRight.delay(200 + index * 100)}>
-              <TouchableOpacity style={styles.productCard} onPress={() => router.push({ pathname: '/product', params: { id: product.id } })}>
-                <View style={styles.productImageContainer}>
-                  <Image source={{ uri: product.image }} style={styles.productImage} />
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator color="#059669" size="large" />
+            <Text style={styles.loadingText}>Đang tìm kiếm nguyên liệu...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.centerContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity 
+              style={styles.retryButton} 
+              onPress={() => {
+                setError(null);
+                setLoading(true);
+                // Trigger refetch by resetting states if needed, but useEffect handles query changes
+              }}
+            >
+              <Text style={styles.retryButtonText}>Thử lại</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* AI Explanation Card */}
+            {aiExplanation && (
+              <Animated.View entering={FadeInDown.delay(150)} style={styles.aiExplanationCard}>
+                <View style={styles.aiExplanationHeader}>
+                  <Zap color="#059669" size={20} fill="#059669" style={{ marginRight: 8 }} />
+                  <Text style={styles.aiExplanationTitle}>Trợ lý AI phân tích dinh dưỡng</Text>
                 </View>
-                <View style={styles.productContent}>
-                  <View style={styles.tagRow}>
-                    {product.tags.map((tag, idx) => {
-                      const style = getTagStyle(tag.type);
-                      return (
-                        <View key={idx} style={[styles.tag, { backgroundColor: style.bg }]}>
-                          <Text style={[styles.tagText, { color: style.text }]}>{tag.text}</Text>
+                <Text style={styles.aiExplanationText}>{aiExplanation}</Text>
+              </Animated.View>
+            )}
+
+            {/* Results Info */}
+            <Animated.View entering={FadeInDown.delay(150)} style={styles.resultsInfo}>
+              <Text style={styles.resultsTitle}>Kết quả phù hợp</Text>
+              <Text style={styles.resultsCount}>{mappedResults.length} sản phẩm</Text>
+            </Animated.View>
+
+            {mappedResults.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>Không tìm thấy sản phẩm nào phù hợp.</Text>
+              </View>
+            ) : (
+              /* Product List */
+              <View style={styles.productList}>
+                {mappedResults.map((product, index) => (
+                  <View key={product.id}>
+                    <TouchableOpacity style={styles.productCard} onPress={() => router.push({ pathname: '/product', params: { id: product.id } })}>
+                      <Image
+                        source={{ uri: product.image }}
+                        style={styles.productImageContainer}
+                        contentFit="cover"
+                      />
+                      <Animated.View entering={FadeInRight.delay(200 + index * 100)} style={styles.productContent}>
+                        <View style={styles.tagRow}>
+                          {product.tags.map((tag, idx) => {
+                            const style = getTagStyle(tag.type);
+                            return (
+                              <View key={idx} style={[styles.tag, { backgroundColor: style.bg }]}>
+                                <Text style={[styles.tagText, { color: style.text }]}>{tag.text}</Text>
+                              </View>
+                            );
+                          })}
                         </View>
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.productTitle} numberOfLines={2}>{product.title}</Text>
-                  <View style={styles.ratingRow}>
-                    <Star color="#F59E0B" size={14} fill="#F59E0B" />
-                    <Text style={styles.ratingText}>{product.rating} <Text style={styles.reviewText}>({product.reviews} đánh giá)</Text></Text>
-                  </View>
-                  <View style={styles.priceRow}>
-                    <Text style={styles.priceText}>{product.price}</Text>
-                    <TouchableOpacity style={styles.addButton} onPress={() => setCartCount(c => c + 1)}>
-                      <Plus color="white" size={16} />
-                      <Text style={styles.addButtonText}>Thêm</Text>
+                        <Text style={styles.productTitle} numberOfLines={2}>{product.title}</Text>
+                        <View style={styles.ratingRow}>
+                          <Star color="#F59E0B" size={14} fill="#F59E0B" />
+                          <Text style={styles.ratingText}>{product.rating} <Text style={styles.reviewText}>({product.reviews} đánh giá)</Text></Text>
+                        </View>
+                        <View style={styles.priceRow}>
+                          <Text style={styles.priceText}>{product.price}</Text>
+                          <TouchableOpacity style={styles.addButton} onPress={() => setCartCount(c => c + 1)}>
+                            <Plus color="white" size={16} />
+                            <Text style={styles.addButtonText}>Thêm</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </Animated.View>
                     </TouchableOpacity>
                   </View>
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-          ))}
-        </View>
+                ))}
+              </View>
+            )}
+          </>
+        )}
 
         {/* AI Suggestions */}
         <Animated.View entering={FadeInDown.delay(500)} style={styles.aiSection}>
@@ -213,10 +325,10 @@ export default function SearchScreenMain() {
         </Animated.View>
       </ScrollView>
 
-      {/* Floating AI Button
+      {/* Floating AI Button */}
       <TouchableOpacity style={styles.floatingButton}>
         <Zap color="white" size={24} fill="white" />
-      </TouchableOpacity> */}
+      </TouchableOpacity>
 
 
     </SafeAreaView>
@@ -614,5 +726,73 @@ const styles = StyleSheet.create({
   },
   navTextActive: {
     color: '#059669',
+  },
+  centerContainer: {
+    padding: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+  retryButton: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  aiExplanationCard: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  aiExplanationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  aiExplanationTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  aiExplanationText: {
+    fontSize: 13,
+    color: '#065F46',
+    lineHeight: 20,
+  },
+  emptyContainer: {
+    padding: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
   },
 });

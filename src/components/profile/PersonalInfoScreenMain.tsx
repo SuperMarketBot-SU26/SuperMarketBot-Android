@@ -1,14 +1,131 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Camera, ChevronLeft, Edit2, Home, Mail, Map, MapPin, Phone, ShoppingBag, User, User as UserIcon } from 'lucide-react-native';
-import React from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ArrowRight, Camera, ChevronLeft, Edit2, Home, Mail, Map, MapPin, Phone, ShoppingBag, User, User as UserIcon, Lock } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
+import { AuthService } from '../../services/AuthService';
+import { ProfileService, ProfileDto } from '../../services/ProfileService';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function PersonalInfoScreenMain() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+
+  const [isChangePassModalVisible, setChangePassModalVisible] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [isChangePassLoading, setIsChangePassLoading] = useState(false);
+
+  // Profile States
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [fullName, setFullName] = useState(user?.fullName || '');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+
+  // Avatar mặc định (Facebook avatar placeholder)
+  const defaultAvatar = 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png';
+
+  React.useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const profile = await ProfileService.getProfile();
+        setFullName(profile.fullName || user?.fullName || '');
+        setPhoneNumber(profile.phone || '');
+        setImageUrl(profile.facePath || null);
+      } catch (error) {
+        console.error('Failed to fetch profile', error);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  const handlePickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permissionResult.granted === false) {
+      Alert.alert('Thông báo', 'Bạn cần cấp quyền truy cập thư viện ảnh!');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const asset = result.assets[0];
+      setImageUrl(asset.uri);
+      if (asset.base64) {
+        setImageBase64(asset.base64);
+      }
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    try {
+      const data: ProfileDto = {
+        fullName,
+        phone: phoneNumber,
+      };
+      if (imageBase64) {
+        data.imageBase64 = imageBase64;
+      }
+      await ProfileService.updateProfile(data);
+      Alert.alert('Thành công', 'Cập nhật thông tin cá nhân thành công!');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Cập nhật thất bại.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangePasswordRequest = async () => {
+    if (!user?.email) {
+      Alert.alert('Lỗi', 'Không tìm thấy email của bạn.');
+      return;
+    }
+    setIsChangePassLoading(true);
+    try {
+      await AuthService.forgotPassword(user.email);
+      setChangePassModalVisible(true);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Không thể gửi yêu cầu đổi mật khẩu.');
+    } finally {
+      setIsChangePassLoading(false);
+    }
+  };
+
+  const handleSubmitNewPassword = async () => {
+    if (!otpCode || !newPassword) {
+      Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ mã OTP và mật khẩu mới.');
+      return;
+    }
+    if (!user?.email) return;
+
+    setIsChangePassLoading(true);
+    try {
+      await AuthService.resetPassword(user.email, otpCode, newPassword);
+      Alert.alert('Thành công', 'Đổi mật khẩu thành công!');
+      setChangePassModalVisible(false);
+      setOtpCode('');
+      setNewPassword('');
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Lỗi đặt lại mật khẩu.');
+    } finally {
+      setIsChangePassLoading(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -36,91 +153,139 @@ export default function PersonalInfoScreenMain() {
             <Animated.View entering={FadeInDown.delay(100)} style={styles.avatarSection}>
               <View style={styles.avatarWrapper}>
                 <Image
-                  source={{ uri: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }}
+                  source={{ uri: imageUrl || defaultAvatar }}
                   style={styles.avatar}
                 />
-                <TouchableOpacity style={styles.cameraBtn}>
+                <TouchableOpacity style={styles.cameraBtn} onPress={handlePickImage}>
                   <Camera color="white" size={14} />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.userName}>Duy Nguyễn</Text>
+              <Text style={styles.userName}>{fullName || 'Người dùng'}</Text>
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>Thành viên Platinum</Text>
+                <Text style={styles.badgeText}>Thành viên tiêu chuẩn</Text>
               </View>
             </Animated.View>
 
             {/* Form Fields */}
             <Animated.View entering={FadeInDown.delay(200)} style={styles.formContainer}>
+              {isLoadingProfile ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <ActivityIndicator color="#059669" size="large" />
+                </View>
+              ) : (
+                <>
+                  {/* Name Field */}
+                  <View style={styles.inputContainer}>
+                    <View style={styles.iconBox}>
+                      <UserIcon color="#059669" size={20} />
+                    </View>
+                    <View style={styles.inputContent}>
+                      <Text style={styles.inputLabel}>Họ tên</Text>
+                      <TextInput
+                        style={[styles.inputValue, { padding: 0, margin: 0, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 4 }]}
+                        value={fullName}
+                        onChangeText={setFullName}
+                        placeholder="Nhập họ tên"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                  </View>
 
-              {/* Name Field */}
-              <View style={styles.inputContainer}>
-                <View style={styles.iconBox}>
-                  <UserIcon color="#059669" size={20} />
+                  {/* Email Field */}
+                  <View style={styles.inputContainer}>
+                    <View style={styles.iconBox}>
+                      <Mail color="#059669" size={20} />
+                    </View>
+                    <View style={styles.inputContent}>
+                      <Text style={styles.inputLabel}>Email</Text>
+                      <Text style={[styles.inputValue, { color: '#6B7280' }]}>{user?.email || 'Chưa cập nhật'}</Text>
+                    </View>
+                  </View>
+
+                  {/* Phone Field */}
+                  <View style={styles.inputContainer}>
+                    <View style={styles.iconBox}>
+                      <Phone color="#059669" size={20} />
+                    </View>
+                    <View style={styles.inputContent}>
+                      <Text style={styles.inputLabel}>Số điện thoại</Text>
+                      <TextInput
+                        style={[styles.inputValue, { padding: 0, margin: 0, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 4 }]}
+                        value={phoneNumber}
+                        onChangeText={setPhoneNumber}
+                        placeholder="Nhập số điện thoại"
+                        placeholderTextColor="#9CA3AF"
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Change Password Button */}
+              <TouchableOpacity style={styles.inputContainer} onPress={handleChangePasswordRequest}>
+                <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
+                  <Lock color="#DC2626" size={20} />
                 </View>
                 <View style={styles.inputContent}>
-                  <Text style={styles.inputLabel}>Họ tên</Text>
-                  <Text style={styles.inputValue}>Duy Nguyễn</Text>
+                  <Text style={[styles.inputValue, { color: '#DC2626' }]}>Thay đổi mật khẩu</Text>
                 </View>
-                <TouchableOpacity style={styles.editBtn}>
-                  <Edit2 color="#059669" size={18} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Email Field */}
-              <View style={styles.inputContainer}>
-                <View style={styles.iconBox}>
-                  <Mail color="#059669" size={20} />
+                <View style={styles.editBtn}>
+                  {isChangePassLoading && !isChangePassModalVisible ? <ActivityIndicator size="small" color="#DC2626" /> : <ChevronLeft color="#DC2626" size={18} style={{ transform: [{ rotate: '180deg' }] }} />}
                 </View>
-                <View style={styles.inputContent}>
-                  <Text style={styles.inputLabel}>Email</Text>
-                  <Text style={styles.inputValue}>duy.nguyen@example.com</Text>
-                </View>
-                <TouchableOpacity style={styles.editBtn}>
-                  <Edit2 color="#059669" size={18} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Phone Field */}
-              <View style={styles.inputContainer}>
-                <View style={styles.iconBox}>
-                  <Phone color="#059669" size={20} />
-                </View>
-                <View style={styles.inputContent}>
-                  <Text style={styles.inputLabel}>Số điện thoại</Text>
-                  <Text style={styles.inputValue}>090 123 4567</Text>
-                </View>
-                <TouchableOpacity style={styles.editBtn}>
-                  <Edit2 color="#059669" size={18} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Address Field */}
-              <View style={styles.inputContainer}>
-                <View style={styles.iconBox}>
-                  <MapPin color="#059669" size={20} />
-                </View>
-                <View style={styles.inputContent}>
-                  <Text style={styles.inputLabel}>Địa chỉ</Text>
-                  <Text style={styles.inputValue}>123 Đường Lê Lợi,{'\n'}Quận 1, TP.HCM</Text>
-                </View>
-                <TouchableOpacity style={styles.editBtn}>
-                  <Edit2 color="#059669" size={18} />
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
 
             </Animated.View>
 
             {/* Save Button */}
             <Animated.View entering={FadeInUp.delay(300)} style={styles.actionSection}>
-              <TouchableOpacity style={styles.btnSave}>
-                <Text style={styles.btnSaveText}>Lưu thay đổi</Text>
-                <ArrowRight color="white" size={20} />
+              <TouchableOpacity style={styles.btnSave} onPress={handleSaveProfile} disabled={isSaving || isLoadingProfile}>
+                {isSaving ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Text style={styles.btnSaveText}>Lưu thay đổi</Text>
+                    <ArrowRight color="white" size={20} />
+                  </>
+                )}
               </TouchableOpacity>
 
               <Text style={styles.updateStatusText}>Cập nhật lần cuối: 15/10/2023</Text>
             </Animated.View>
 
           </ScrollView>
+
+          {/* Change Password Modal */}
+          <Modal visible={isChangePassModalVisible} transparent animationType="fade" onRequestClose={() => setChangePassModalVisible(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Xác nhận OTP</Text>
+                <Text style={styles.modalSubtitle}>Chúng tôi đã gửi mã OTP tới email {user?.email}.</Text>
+                
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Mã OTP"
+                  value={otpCode}
+                  onChangeText={setOtpCode}
+                  keyboardType="number-pad"
+                />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Mật khẩu mới"
+                  secureTextEntry
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                />
+                
+                <TouchableOpacity style={styles.modalBtnPrimary} onPress={handleSubmitNewPassword} disabled={isChangePassLoading}>
+                  {isChangePassLoading ? <ActivityIndicator color="white" /> : <Text style={styles.modalBtnPrimaryText}>Xác nhận</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setChangePassModalVisible(false)} disabled={isChangePassLoading}>
+                  <Text style={styles.modalBtnCancelText}>Hủy</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
 
           {/* Bottom Navigation */}
           <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -346,5 +511,60 @@ const styles = StyleSheet.create({
   },
   navTabBoxActive: {
     backgroundColor: '#059669',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  modalBtnPrimary: {
+    backgroundColor: '#059669',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalBtnPrimaryText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  modalBtnCancel: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  modalBtnCancelText: {
+    color: '#6B7280',
+    fontWeight: '500',
+    fontSize: 15,
   }
 });

@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ArrowRight, ShieldAlert, CheckCircle2, Circle, Droplets, Fish, Leaf, Wheat, Egg, Sprout } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInUp, FadeInLeft } from 'react-native-reanimated';
+import * as SecureStore from 'expo-secure-store';
 
 const ALLERGIES = [
   { id: '1', title: 'Đậu phộng (Peanut)', subtitle: 'Bao gồm các loại đậu và hạt', icon: Leaf, color: '#D97706' },
@@ -21,6 +22,24 @@ export default function AllergiesScreen() {
 
   const toggleSelection = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+
+  const handleNext = async () => {
+    try {
+      await SecureStore.setItemAsync('userAllergies', JSON.stringify(selected));
+    } catch (e) {
+      console.warn('Error saving allergies:', e);
+    }
+    router.push('/onboarding/budget');
+  };
+
+  const handleSkip = async () => {
+    try {
+      await SecureStore.deleteItemAsync('userAllergies');
+    } catch (e) {
+      console.warn('Error clearing allergies:', e);
+    }
+    router.push('/onboarding/budget');
   };
 
   return (
@@ -45,7 +64,7 @@ export default function AllergiesScreen() {
           <View style={styles.shieldIcon}>
             <ShieldAlert color="#EA580C" size={16} />
           </View>
-          <Text style={styles.stepText}>BƯỚC 2: CẢNH BÁO SỨC KHỎE</Text>
+          <Text style={stepIndicatorTextStyles()}>BƯỚC 2: CẢNH BÁO SỨC KHỎE</Text>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.titleSection}>
@@ -60,7 +79,7 @@ export default function AllergiesScreen() {
             return (
               <Animated.View key={item.id} entering={FadeInLeft.delay(300 + index * 100).springify()}>
                 <TouchableOpacity
-                  style={[styles.listItem, isSelected && styles.listItemSelected]}
+                   style={[styles.listItem, isSelected && styles.listItemSelected]}
                   onPress={() => toggleSelection(item.id)}
                   activeOpacity={0.8}
                 >
@@ -84,16 +103,20 @@ export default function AllergiesScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
-        <TouchableOpacity style={styles.nextButton} onPress={() => router.push('/onboarding/budget')}>
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
           <Text style={styles.nextButtonText}>Tiếp tục</Text>
           <ArrowRight color="white" size={20} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.skipButton} onPress={() => router.push('/onboarding/budget')}>
+        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
           <Text style={styles.skipButtonText}>Tôi không có dị ứng</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
+}
+
+function stepIndicatorTextStyles(): import("react-native").StyleProp<import("react-native").TextStyle> {
+  return styles.stepText;
 }
 
 const styles = StyleSheet.create({

@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import * as SecureStore from 'expo-secure-store';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
@@ -81,6 +82,24 @@ export default function DietPreferencesScreen() {
     setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
+  const handleNext = async () => {
+    try {
+      await SecureStore.setItemAsync('userDiet', JSON.stringify(selected));
+    } catch (e) {
+      console.warn('Error saving diet preferences:', e);
+    }
+    router.push('/onboarding/allergies');
+  };
+
+  const handleSkip = async () => {
+    try {
+      await SecureStore.deleteItemAsync('userDiet');
+    } catch (e) {
+      console.warn('Error clearing diet preferences:', e);
+    }
+    router.push('/onboarding/allergies');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.topBar}>
@@ -137,11 +156,11 @@ export default function DietPreferencesScreen() {
           <CheckCircle2 color="#059669" size={16} />
           <Text style={styles.infoText}>Bạn có thể thay đổi các lựa chọn này bất cứ lúc nào</Text>
         </View>
-        <TouchableOpacity style={styles.nextButton} onPress={() => router.push('/onboarding/allergies')}>
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
           <Text style={styles.nextButtonText}>Tiếp tục</Text>
           <ArrowRight color="white" size={20} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.skipButton}>
+        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
           <Text style={styles.skipButtonText}>Để sau</Text>
         </TouchableOpacity>
       </View>

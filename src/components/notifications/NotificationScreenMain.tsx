@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Bell, CheckCircle2, ArrowRight, Tag, Star, Leaf } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInRight, SharedTransition, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
@@ -26,9 +26,9 @@ export default function NotificationScreenMain() {
             </View>
             <Text style={styles.headerTitle}>Smart Market Bot</Text>
           </View>
-          <View style={styles.bellBtn}>
-            <Bell color="#059669" size={20} />
-          </View>
+          <Animated.View style={styles.bellBtn} sharedTransitionTag="shared-bell-icon">
+            <Bell color="#059669" size={40} />
+          </Animated.View>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -164,9 +164,9 @@ const styles = StyleSheet.create({
     color: '#064E3B',
   },
   bellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#D1FAE5',
     alignItems: 'center',
     justifyContent: 'center',

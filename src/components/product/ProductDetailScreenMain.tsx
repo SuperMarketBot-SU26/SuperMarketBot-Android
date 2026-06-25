@@ -1,19 +1,22 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Award, Clock, Heart, Minus, Plus, ShieldCheck, ShoppingBag, Star } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useEffect, useState } from 'react';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ProductService, ProductDto } from '../../services/ProductService';
 
 const { width } = Dimensions.get('window');
 
-// Mock data (in a real app, you would fetch this based on the ID)
-const PRODUCT_DATA = {
-  id: '1',
-  title: 'Cá Basa Phi Lê CP Khay 500g',
-  image: 'https://i.pinimg.com/736x/5e/e8/f8/5ee8f8e1d20352068b8ee84f7e462e64.jpg',
-  price: '65.000đ',
-  originalPrice: '75.000đ',
+// Keep some mock data for fields not in the backend schema yet
+const MOCK_EXTRA_DATA = {
+  originalPrice: null,
   rating: 4.8,
   reviews: 130,
   sold: '1.2k',
@@ -21,7 +24,7 @@ const PRODUCT_DATA = {
   brand: 'CP',
   origin: 'Việt Nam',
   expiry: '3 ngày từ NSX',
-  description: 'Cá basa phi lê CP được chọn lọc từ những con cá tươi ngon nhất, nuôi theo quy trình chuẩn VietGAP. Thịt cá trắng, dai ngon, giàu Omega-3, thích hợp chế biến nhiều món ăn như canh chua, chiên giòn, kho tộ...',
+  description: 'Sản phẩm được chọn lọc từ những nguồn nguyên liệu tươi ngon nhất, đạt chuẩn chất lượng cao. Thích hợp sử dụng cho gia đình hàng ngày.',
   nutrition: [
     { label: 'Năng lượng', value: '135 kcal' },
     { label: 'Protein', value: '18g' },
@@ -36,9 +39,43 @@ export default function ProductDetailScreenMain() {
   const { id } = useLocalSearchParams();
   const [quantity, setQuantity] = useState(1);
   const [isLiked, setIsLiked] = useState(false);
+  const [product, setProduct] = useState<ProductDto | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // In a real app, fetch data based on `id`
-  const product = PRODUCT_DATA;
+  // Zoom animation to simulate shared element transition
+  const scale = useSharedValue(0.22);
+  const translateX = useSharedValue(-width * 0.35);
+  const translateY = useSharedValue(-width * 0.2);
+
+  useEffect(() => {
+    if (id) {
+      fetchProductDetail(id as string);
+    }
+  }, [id]);
+
+  const fetchProductDetail = async (productId: string) => {
+    try {
+      setIsLoading(true);
+      const data = await ProductService.getProductDetail(productId);
+      setProduct(data);
+      // start animation after load
+      scale.value = withSpring(1, { damping: 18, stiffness: 200 });
+      translateX.value = withSpring(0, { damping: 18, stiffness: 200 });
+      translateY.value = withSpring(0, { damping: 18, stiffness: 200 });
+    } catch (error) {
+      console.error('Error fetching product detail:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   const decreaseQuantity = () => {
     if (quantity > 1) setQuantity(quantity - 1);
@@ -56,41 +93,71 @@ export default function ProductDetailScreenMain() {
           <ArrowLeft color="#1E293B" size={24} />
         </TouchableOpacity>
         <View style={styles.headerActions}>
+          {/* ===== CSS Transitions Demo =====
+               isLiked thay đổi → scale + opacity tự animate!
+               KHÔNG CẦN useSharedValue / useAnimatedStyle */}
           <TouchableOpacity style={styles.iconButton} onPress={() => setIsLiked(!isLiked)}>
-            <Heart color={isLiked ? "#EF4444" : "#1E293B"} size={20} fill={isLiked ? "#EF4444" : "none"} />
+            <Animated.View
+              style={{
+                // Style thay đổi theo state
+                transform: [{ scale: isLiked ? 1.35 : 1 }],
+                opacity: isLiked ? 1 : 0.6,
+                // CSS Transition config — Reanimated v4 tự tween!
+                transitionProperty: 'transform' as any,
+                transitionDuration: '250ms' as any,
+                transitionTimingFunction: 'ease-out' as any,
+              }}
+            >
+              <Heart
+                color={isLiked ? '#EF4444' : '#1E293B'}
+                size={22}
+                fill={isLiked ? '#EF4444' : 'none'}
+              />
+            </Animated.View>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Product Image */}
-        <Animated.View entering={FadeInDown.delay(100)}>
-          <Image source={{ uri: product.image }} style={styles.productImage} />
-        </Animated.View>
+        {isLoading ? (
+          <View style={{ height: width * 1.15, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#059669" />
+          </View>
+        ) : product ? (
+          <>
+            <Animated.View
+              style={[{ width: width, height: width * 1.15 }, animatedImageStyle]}
+            >
+              <Image
+                source={product.imageUrl ? { uri: product.imageUrl } : { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop' }}
+                style={{ width: width, height: width * 1.15 }}
+                contentFit="cover"
+              />
+            </Animated.View>
 
         {/* Product Info */}
         <Animated.View entering={FadeInDown.delay(200)}>
           <View style={styles.infoContainer}>
             <View style={styles.priceRow}>
-              <Text style={styles.currentPrice}>{product.price}</Text>
-              {product.originalPrice && (
-                <Text style={styles.originalPrice}>{product.originalPrice}</Text>
+              <Text style={styles.currentPrice}>{product?.unitPrice.toLocaleString('vi-VN')} đ</Text>
+              {MOCK_EXTRA_DATA.originalPrice && (
+                <Text style={styles.originalPrice}>{MOCK_EXTRA_DATA.originalPrice}</Text>
               )}
-              <View style={styles.discountBadge}>
+              {/* <View style={styles.discountBadge}>
                 <Text style={styles.discountText}>-13%</Text>
-              </View>
+              </View> */}
             </View>
 
-            <Text style={styles.productTitle}>{product.title}</Text>
+            <Text style={styles.productTitle}>{product?.productName}</Text>
 
             <View style={styles.statsRow}>
               <View style={styles.ratingContainer}>
                 <Star color="#F59E0B" size={16} fill="#F59E0B" />
-                <Text style={styles.ratingText}>{product.rating}</Text>
-                <Text style={styles.reviewText}>({product.reviews})</Text>
+                <Text style={styles.ratingText}>{MOCK_EXTRA_DATA.rating}</Text>
+                <Text style={styles.reviewText}>({MOCK_EXTRA_DATA.reviews})</Text>
               </View>
               <View style={styles.statsDivider} />
-              <Text style={styles.soldText}>Đã bán {product.sold}</Text>
+              <Text style={styles.soldText}>Đã bán {MOCK_EXTRA_DATA.sold}</Text>
             </View>
 
             {/* Guarantees */}
@@ -117,27 +184,27 @@ export default function ProductDetailScreenMain() {
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Thương hiệu</Text>
-            <Text style={styles.detailValue}>{product.brand}</Text>
+            <Text style={styles.detailValue}>{MOCK_EXTRA_DATA.brand}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Xuất xứ</Text>
-            <Text style={styles.detailValue}>{product.origin}</Text>
+            <Text style={styles.detailValue}>{MOCK_EXTRA_DATA.origin}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Hạn sử dụng</Text>
-            <Text style={styles.detailValue}>{product.expiry}</Text>
+            <Text style={styles.detailValue}>{MOCK_EXTRA_DATA.expiry}</Text>
           </View>
 
           <View style={styles.divider} />
 
           <Text style={styles.sectionTitle}>Mô tả sản phẩm</Text>
-          <Text style={styles.descriptionText}>{product.description}</Text>
+          <Text style={styles.descriptionText}>{MOCK_EXTRA_DATA.description}</Text>
 
           <View style={styles.divider} />
 
           <Text style={styles.sectionTitle}>Giá trị dinh dưỡng (trên 100g)</Text>
           <View style={styles.nutritionGrid}>
-            {product.nutrition.map((item, index) => (
+            {MOCK_EXTRA_DATA.nutrition.map((item, index) => (
               <View key={index} style={styles.nutritionCard}>
                 <Text style={styles.nutritionValue}>{item.value}</Text>
                 <Text style={styles.nutritionLabel}>{item.label}</Text>
@@ -145,6 +212,12 @@ export default function ProductDetailScreenMain() {
             ))}
           </View>
         </Animated.View>
+          </>
+        ) : (
+          <View style={{ marginTop: 100, alignItems: 'center' }}>
+            <Text style={{ color: '#6B7280' }}>Không tìm thấy sản phẩm</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom Fixed Action Bar */}
@@ -159,10 +232,32 @@ export default function ProductDetailScreenMain() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.addToCartButton} onPress={() => router.push('/cart')}>
+        {/* ===== CSS Transitions: nút Thêm vào giỏ =====
+             Đặt transform + transitionProperty CÙNG trên Animated.View */}
+        <Animated.View
+          style={{
+            flex: 1,
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'row',
+            gap: 8,
+            paddingVertical: 16,
+            paddingHorizontal: 24,
+            backgroundColor: '#059669',
+            // CSS Transition — animate khi pressed thay đổi
+            transitionProperty: 'transform' as any,
+            transitionDuration: '120ms' as any,
+            transitionTimingFunction: 'ease-out' as any,
+          }}
+        >
+          <Pressable
+            onPress={() => router.push('/cart')}
+            style={StyleSheet.absoluteFillObject}
+          />
           <ShoppingBag color="white" size={20} />
           <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
-        </TouchableOpacity>
+        </Animated.View>
       </View>
     </View>
   );
@@ -203,9 +298,8 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   productImage: {
-    width: width,
-    height: width * 1.15,
-    resizeMode: 'cover',
+    width: '100%',
+    height: '100%',
   },
   infoContainer: {
     backgroundColor: 'white',

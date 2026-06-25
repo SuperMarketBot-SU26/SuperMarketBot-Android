@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { PanResponder, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as SecureStore from 'expo-secure-store';
 
 export default function BudgetScreen() {
   const router = useRouter();
@@ -48,6 +49,16 @@ export default function BudgetScreen() {
     if (numericValue.length <= 8) { // max 99M
       setAmount(numericValue);
     }
+  };
+
+  const handleComplete = async () => {
+    try {
+      await SecureStore.setItemAsync('userBudget', amount);
+      await SecureStore.setItemAsync('onboardingCompleted', 'true');
+    } catch (e) {
+      console.warn('Error saving budget preferences:', e);
+    }
+    router.replace('/home');
   };
 
   const formattedAmount = amount ? amount.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '0';
@@ -146,7 +157,7 @@ export default function BudgetScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
-        <TouchableOpacity style={styles.nextButton} onPress={() => router.replace('/home')}>
+        <TouchableOpacity style={styles.nextButton} onPress={handleComplete}>
           <Text style={styles.nextButtonText}>Hoàn tất</Text>
           <ArrowRight color="white" size={20} />
         </TouchableOpacity>
