@@ -22,6 +22,7 @@ import * as signalR from '@microsoft/signalr';
 import { CartService, CartDto, CartItemDto } from '../../services/CartService';
 import { ProfileService, ProfileDto } from '../../services/ProfileService';
 import { BASE_URL } from '../../services/AuthService';
+import { useNotification } from '../../context/NotificationContext';
 
 const DELETE_THRESHOLD = -120; // vuốt qua ngưỡng này → tự xóa
 const REVEAL_THRESHOLD = -75;  // vuốt qua ngưỡng này → lộ nút đỏ
@@ -191,6 +192,7 @@ export default function CartScreenMain() {
   const [cart, setCart] = useState<CartDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
+  const { hubConnection } = useNotification();
 
   const formatPrice = (price: number) => {
     return price ? price.toLocaleString('vi-VN') + ' đ' : '0 đ';
@@ -213,44 +215,25 @@ export default function CartScreenMain() {
 
   // Lắng nghe SignalR Hub để đồng bộ Real-time
   useEffect(() => {
-    let hubConnection: signalR.HubConnection | null = null;
-
-    const setupSignalR = async () => {
-      try {
-        const token = await SecureStore.getItemAsync('userToken');
-        if (token) {
-          hubConnection = new signalR.HubConnectionBuilder()
-            .withUrl(`${BASE_URL}/hubs/member`, {
-              accessTokenFactory: () => Promise.resolve(token)
-            })
-            .withAutomaticReconnect()
-            .build();
-
-          hubConnection.on('CartUpdate', (updatedCart: CartDto) => {
-            console.log('[SignalR CartUpdate]', updatedCart);
-            setCart(updatedCart);
-          });
-
-          await hubConnection.start();
-          console.log('[SignalR Hub] Member Hub connected.');
-        }
-      } catch (e) {
-        console.warn('[SignalR Hub] Connection failed:', e);
-      }
-    };
-
     if (isFocused) {
       fetchProfileAndCart();
-      setupSignalR();
     }
-
-    return () => {
-      if (hubConnection) {
-        hubConnection.stop();
-        console.log('[SignalR Hub] Member Hub stopped.');
-      }
-    };
   }, [isFocused]);
+
+  useEffect(() => {
+    if (hubConnection) {
+      const handleCartUpdate = (updatedCart: CartDto) => {
+        console.log('[SignalR CartUpdate]', updatedCart);
+        setCart(updatedCart);
+      };
+      
+      hubConnection.on('CartUpdate', handleCartUpdate);
+      
+      return () => {
+        hubConnection.off('CartUpdate', handleCartUpdate);
+      };
+    }
+  }, [hubConnection]);
 
   const updateQuantity = useCallback(async (productId: number, newQty: number) => {
     try {
@@ -329,7 +312,7 @@ export default function CartScreenMain() {
           <View style={styles.header}>
             <View style={styles.headerTitleContainer}>
               <Image
-                source={{ uri: profile?.facePath || 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }}
+                source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }}
                 style={styles.headerAvatar}
               />
               <Text style={styles.headerTitle}>Giỏ hàng của bạn</Text>

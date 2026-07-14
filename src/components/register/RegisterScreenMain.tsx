@@ -33,7 +33,7 @@ function InAppToast({ toast, onHide }: { toast: Toast | null; onHide: () => void
 
   const config = {
     success: { bg: '#ECFDF5', border: '#22C55E', icon: <CheckCircle2 size={20} color="#22C55E" />, titleColor: '#166534' },
-    error:   { bg: '#FEF2F2', border: '#EF4444', icon: <XCircle size={20} color="#EF4444" />,       titleColor: '#991B1B' },
+    error: { bg: '#FEF2F2', border: '#EF4444', icon: <XCircle size={20} color="#EF4444" />, titleColor: '#991B1B' },
     warning: { bg: '#FFFBEB', border: '#F59E0B', icon: <AlertTriangle size={20} color="#F59E0B" />, titleColor: '#92400E' },
   }[toast.type];
 
@@ -207,7 +207,7 @@ export default function RegisterScreen() {
 
               {/* Số điện thoại */}
               <Animated.View entering={FadeInLeft.delay(550).springify()} style={styles.inputGroup}>
-                <Text style={styles.label}>Số điện thoại (tùy chọn)</Text>
+                <Text style={styles.label}>Số điện thoại</Text>
                 <View style={styles.inputContainer}>
                   <Phone color="#9CA3AF" size={20} style={styles.inputIcon} />
                   <TextInput

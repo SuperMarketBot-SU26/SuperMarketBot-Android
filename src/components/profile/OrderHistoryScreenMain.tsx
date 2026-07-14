@@ -32,7 +32,7 @@ export default function OrderHistoryScreenMain() {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/profile')}>
               <Image
-                source={{ uri: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }}
+                source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }}
                 style={styles.avatar}
               />
             </TouchableOpacity>

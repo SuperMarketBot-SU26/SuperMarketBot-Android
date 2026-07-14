@@ -1,24 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ArrowRight, ShieldAlert, CheckCircle2, Circle, Droplets, Fish, Leaf, Wheat, Egg, Sprout } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInUp, FadeInLeft } from 'react-native-reanimated';
 import * as SecureStore from 'expo-secure-store';
+import { PersonalizationService } from '../../services/PersonalizationService';
 
-const ALLERGIES = [
-  { id: '1', title: 'Đậu phộng (Peanut)', subtitle: 'Bao gồm các loại đậu và hạt', icon: Leaf, color: '#D97706' },
-  { id: '2', title: 'Hải sản (Seafood)', subtitle: 'Tôm, cua, mực, cá biển', icon: Fish, color: '#EA580C' },
-  { id: '3', title: 'Lactose (Milk)', subtitle: 'Sữa tươi và các chế phẩm từ sữa', icon: Droplets, color: '#8B5CF6' },
-  { id: '4', title: 'Gluten (Lúa mì)', subtitle: 'Bánh mì, mì sợi, lúa mạch', icon: Wheat, color: '#EAB308' },
-  { id: '5', title: 'Trứng (Egg)', subtitle: 'Trứng gà, vịt, chim cút', icon: Egg, color: '#FCD34D' },
-  { id: '6', title: 'Đậu nành (Soy)', subtitle: 'Nước tương, đậu hũ, sữa đậu nành', icon: Sprout, color: '#22C55E' },
-];
+const ALLERGY_UI_MAP: Record<number, { subtitle: string, icon: any, color: string }> = {
+  1: { subtitle: 'Bao gồm các loại đậu và hạt', icon: Leaf, color: '#D97706' },
+  2: { subtitle: 'Bánh mì, mì sợi, lúa mạch', icon: Wheat, color: '#EAB308' },
+  3: { subtitle: 'Sữa tươi và các chế phẩm từ sữa', icon: Droplets, color: '#8B5CF6' },
+  4: { subtitle: 'Trứng gà, vịt, chim cút', icon: Egg, color: '#FCD34D' },
+  5: { subtitle: 'Tôm, cua, mực, cá biển', icon: Fish, color: '#EA580C' },
+};
+
+const DEFAULT_UI = { subtitle: 'Dị ứng thực phẩm', icon: ShieldAlert, color: '#EF4444' };
+
+interface AllergyItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: any;
+  color: string;
+}
 
 export default function AllergiesScreen() {
   const router = useRouter();
-  const [selected, setSelected] = useState<string[]>(['2']); // Default selected for mockup
+  const [selected, setSelected] = useState<string[]>([]);
+  const [availableAllergies, setAvailableAllergies] = useState<AllergyItem[]>([]);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tags, dietStr] = await Promise.all([
+          PersonalizationService.getHealthTags(),
+          SecureStore.getItemAsync('userDiet')
+        ]);
+        
+        const allergyTags = tags.filter(t => t.tagType === 'allergy');
+        
+        let processedAllergies = allergyTags.map(tag => ({
+          id: tag.healthTagId.toString(),
+          title: tag.tagName,
+          ...(ALLERGY_UI_MAP[tag.healthTagId] || DEFAULT_UI)
+        }));
+
+        const diets = dietStr ? JSON.parse(dietStr) : [];
+        if (diets.includes('8')) {
+          processedAllergies = processedAllergies.filter(a => !['5', '3', '4'].includes(a.id));
+        }
+        
+        setAvailableAllergies(processedAllergies);
+      } catch (e) {
+        console.warn('Lỗi khi lấy dữ liệu dị ứng:', e);
+      }
+    };
+    fetchData();
+  }, []);
 
   const toggleSelection = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -27,8 +67,19 @@ export default function AllergiesScreen() {
   const handleNext = async () => {
     try {
       await SecureStore.setItemAsync('userAllergies', JSON.stringify(selected));
+
+      const dietStr = await SecureStore.getItemAsync('userDiet');
+      const diets = dietStr ? JSON.parse(dietStr) : [];
+      
+      const preferences = [
+        ...diets.map((id: string) => ({ healthTagId: parseInt(id), status: 'Preferred' })),
+        ...selected.map((id: string) => ({ healthTagId: parseInt(id), status: 'Allergy' }))
+      ];
+
+      await PersonalizationService.updateHealthPreferences(preferences as any);
+
     } catch (e) {
-      console.warn('Error saving allergies:', e);
+      console.warn('Error saving health preferences:', e);
     }
     router.push('/onboarding/budget');
   };
@@ -73,7 +124,7 @@ export default function AllergiesScreen() {
         </Animated.View>
 
         <View style={styles.listContainer}>
-          {ALLERGIES.map((item, index) => {
+          {availableAllergies.map((item, index) => {
             const isSelected = selected.includes(item.id);
             const Icon = item.icon;
             return (

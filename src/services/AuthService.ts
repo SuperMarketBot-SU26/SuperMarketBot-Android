@@ -53,7 +53,7 @@ export class AuthService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[AuthService.login] Error body (${response.status}):`, rawText);
-      throw new Error(data.detail || data.title || data.message || `Đăng nhập thất bại (${response.status})`);
+      throw new Error(data.error || data.detail || data.title || data.message || `Đăng nhập thất bại (${response.status})`);
     }
     return response.json();
   }
@@ -72,7 +72,7 @@ export class AuthService {
       const validationErrors = data.errors
         ? Object.values(data.errors).flat().join(' ')
         : null;
-      throw new Error(validationErrors || data.detail || data.title || data.message || `Đăng ký thất bại (${response.status})`);
+      throw new Error(validationErrors || data.error || data.detail || data.title || data.message || `Đăng ký thất bại (${response.status})`);
     }
     console.log('[AuthService.register] Đăng ký thành công (200 OK)');
     return true;
@@ -90,7 +90,7 @@ export class AuthService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.warn(`[AuthService.loginFace] Error body (${response.status}):`, rawText);
-      throw new Error(data.detail || data.title || data.message || `Đăng nhập khuôn mặt thất bại (${response.status})`);
+      throw new Error(data.error || data.detail || data.title || data.message || `Đăng nhập khuôn mặt thất bại (${response.status})`);
     }
     return response.json();
   }
@@ -110,7 +110,7 @@ export class AuthService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[AuthService.registerFace] Error body (${response.status}):`, rawText);
-      throw new Error(data.detail || data.title || data.message || `Đăng ký khuôn mặt thất bại (${response.status})`);
+      throw new Error(data.error || data.detail || data.title || data.message || `Đăng ký khuôn mặt thất bại (${response.status})`);
     }
     console.log('[AuthService.registerFace] Đăng ký khuôn mặt thành công');
     return true;
@@ -128,7 +128,7 @@ export class AuthService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[AuthService.forgotPassword] Error body (${response.status}):`, rawText);
-      throw new Error(data.detail || data.title || data.message || `Lấy lại mật khẩu thất bại (${response.status})`);
+      throw new Error(data.error || data.detail || data.title || data.message || `Lấy lại mật khẩu thất bại (${response.status})`);
     }
     return true;
   }
@@ -144,7 +144,7 @@ export class AuthService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[AuthService.resetPassword] Error body (${response.status}):`, rawText);
-      throw new Error(data.detail || data.title || data.message || `Đổi mật khẩu thất bại (${response.status})`);
+      throw new Error(data.error || data.detail || data.title || data.message || `Đổi mật khẩu thất bại (${response.status})`);
     }
     return true;
   }

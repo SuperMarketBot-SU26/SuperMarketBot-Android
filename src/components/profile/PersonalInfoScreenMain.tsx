@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, updateGlobalAvatarVersion } from '../../context/AuthContext';
 import { AuthService } from '../../services/AuthService';
 import { ProfileService, ProfileDto } from '../../services/ProfileService';
 import * as ImagePicker from 'expo-image-picker';
@@ -13,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 export default function PersonalInfoScreenMain() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, token, profile, refreshProfile } = useAuth();
 
   const [isChangePassModalVisible, setChangePassModalVisible] = useState(false);
   const [otpCode, setOtpCode] = useState('');
@@ -27,25 +27,22 @@ export default function PersonalInfoScreenMain() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [isAvatarDeleted, setIsAvatarDeleted] = useState(false);
 
   // Avatar mặc định (Facebook avatar placeholder)
   const defaultAvatar = 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png';
 
   React.useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const profile = await ProfileService.getProfile();
-        setFullName(profile.fullName || user?.fullName || '');
-        setPhoneNumber(profile.phone || '');
-        setImageUrl(profile.facePath || null);
-      } catch (error) {
-        console.error('Failed to fetch profile', error);
-      } finally {
-        setIsLoadingProfile(false);
-      }
-    };
-    fetchProfile();
-  }, []);
+    if (profile) {
+      setFullName(profile.fullName || user?.fullName || '');
+      setPhoneNumber(profile.phone || '');
+      
+      // Chỉ cập nhật imageUrl từ mạng nếu user chưa chọn ảnh mới từ thư viện (imageBase64 null)
+      // hoặc nếu url thay đổi sau khi lưu.
+      setImageUrl(profile.avatarUrl || profile.facePath || null);
+      setIsLoadingProfile(false);
+    }
+  }, [profile]);
 
   const handlePickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -68,7 +65,28 @@ export default function PersonalInfoScreenMain() {
       if (asset.base64) {
         setImageBase64(asset.base64);
       }
+      setIsAvatarDeleted(false);
     }
+  };
+
+  const handleAvatarOptions = () => {
+    Alert.alert(
+      'Ảnh đại diện',
+      'Bạn muốn làm gì?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        { 
+          text: 'Xóa ảnh', 
+          onPress: () => {
+            setImageUrl(null);
+            setImageBase64(null);
+            setIsAvatarDeleted(true);
+          }, 
+          style: 'destructive' 
+        },
+        { text: 'Chọn ảnh mới', onPress: handlePickImage },
+      ]
+    );
   };
 
   const handleSaveProfile = async () => {
@@ -78,10 +96,25 @@ export default function PersonalInfoScreenMain() {
         fullName,
         phone: phoneNumber,
       };
-      if (imageBase64) {
-        data.imageBase64 = imageBase64;
-      }
+      
+      // Update basic info (name, phone)
       await ProfileService.updateProfile(data);
+
+      // Update avatar / face if a new image was picked or deleted
+      if (imageBase64 && imageUrl) {
+        await ProfileService.uploadAvatar(imageUrl);
+        setImageBase64(null); // Clear after upload
+        setIsAvatarDeleted(false);
+        updateGlobalAvatarVersion(); // Bust cache for remote image
+      } else if (isAvatarDeleted) {
+        await ProfileService.deleteAvatar();
+        setIsAvatarDeleted(false);
+        updateGlobalAvatarVersion();
+      }
+
+      // Refresh global profile to sync avatar
+      await refreshProfile();
+      
       Alert.alert('Thành công', 'Cập nhật thông tin cá nhân thành công!');
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Cập nhật thất bại.');
@@ -156,7 +189,7 @@ export default function PersonalInfoScreenMain() {
                   source={{ uri: imageUrl || defaultAvatar }}
                   style={styles.avatar}
                 />
-                <TouchableOpacity style={styles.cameraBtn} onPress={handlePickImage}>
+                <TouchableOpacity style={styles.cameraBtn} onPress={handleAvatarOptions}>
                   <Camera color="white" size={14} />
                 </TouchableOpacity>
               </View>

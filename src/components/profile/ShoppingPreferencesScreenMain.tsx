@@ -6,42 +6,110 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
-// Dummy data for Diets
-const DIETS = [
-  { id: 'chay', name: 'Ăn chay', icon: Leaf },
-  { id: 'duong', name: 'Kiêng đường', icon: FlaskConical },
-  { id: 'organic', name: 'Organic', icon: Zap },
-  { id: 'clean', name: 'Eat Clean', icon: UtensilsCrossed },
-  { id: 'keto', name: 'Keto', icon: Flame },
-  { id: 'lowcarb', name: 'Low Carb', icon: RefreshCw },
-  { id: 'med', name: 'Địa Trung Hải', icon: Fish },
-  { id: 'vegan', name: 'Vegan (thuần chay)', icon: Leaf },
-  { id: 'fasting', name: 'Nhịn ăn gián đoạn', icon: Clock },
-  { id: 'protein', name: 'Giàu protein', icon: Dumbbell },
-  { id: 'calo', name: 'Giảm calo', icon: TrendingDown },
-  { id: 'paleo', name: 'Paleo', icon: Flame },
-];
+import { PersonalizationService, HealthPreferenceItemDto } from '../../services/PersonalizationService';
+import { ProfileService } from '../../services/ProfileService';
+import { useAuth } from '../../context/AuthContext';
+import { ToastAndroid, ActivityIndicator } from 'react-native';
 
-// Dummy data for Allergies
-const ALLERGIES = [
-  { id: 'peanut', name: 'Dị ứng Đậu phộng', defaultOn: true },
-  { id: 'seafood', name: 'Dị ứng Hải sản', defaultOn: false },
-  { id: 'lactose', name: 'Không dung nạp Lactose', defaultOn: true },
-  { id: 'gluten', name: 'Dị ứng Gluten', defaultOn: false },
-  { id: 'egg', name: 'Dị ứng Trứng', defaultOn: false },
-  { id: 'nut', name: 'Dị ứng Các loại hạt', defaultOn: false },
-];
+const DIET_UI_MAP: Record<number, any> = {
+  8: { icon: Leaf },
+  6: { icon: RefreshCw },
+  10: { icon: Zap },
+  7: { icon: Dumbbell },
+};
+
+const DEFAULT_DIET_UI = { icon: UtensilsCrossed };
+
+const ALLERGY_UI_MAP: Record<number, any> = {
+  1: { icon: Leaf },
+  2: { icon: Flame },
+  3: { icon: FlaskConical },
+  4: { icon: Clock },
+  5: { icon: Fish },
+};
+
+const DEFAULT_ALLERGY_UI = { icon: AlertTriangle };
+
+interface HealthItem {
+  id: string;
+  name: string;
+  icon: any;
+}
 
 export default function ShoppingPreferencesScreenMain() {
   const router = useRouter();
 
-  // State
-  const [selectedDiets, setSelectedDiets] = useState<string[]>(['organic']);
-  const [allergies, setAllergies] = useState<Record<string, boolean>>(
-    ALLERGIES.reduce((acc, item) => ({ ...acc, [item.id]: item.defaultOn }), {})
-  );
+  const { profile } = useAuth();
+  
+  const [availableDiets, setAvailableDiets] = useState<HealthItem[]>([]);
+  const [availableAllergies, setAvailableAllergies] = useState<HealthItem[]>([]);
+  const [selectedDiets, setSelectedDiets] = useState<string[]>([]);
+  const [allergies, setAllergies] = useState<Record<string, boolean>>({});
   const [budgetPeriod, setBudgetPeriod] = useState('Tuần');
-  const [amount, setAmount] = useState('2500000');
+  const [amount, setAmount] = useState('0');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const tags = await PersonalizationService.getHealthTags();
+        
+        const dietTags = tags.filter(t => t.tagType === 'diet').map(t => ({
+          id: t.healthTagId.toString(),
+          name: t.tagName,
+          icon: DIET_UI_MAP[t.healthTagId]?.icon || DEFAULT_DIET_UI.icon
+        }));
+        
+        const allergyTags = tags.filter(t => t.tagType === 'allergy').map(t => ({
+          id: t.healthTagId.toString(),
+          name: t.tagName,
+          icon: ALLERGY_UI_MAP[t.healthTagId]?.icon || DEFAULT_ALLERGY_UI.icon
+        }));
+
+        setAvailableDiets(dietTags);
+        setAvailableAllergies(allergyTags);
+
+        // Lấy preferences hiện tại
+        let myPrefsObj: any = null;
+        try {
+          myPrefsObj = await PersonalizationService.getHealthPreferences();
+        } catch (e) {
+          // Bỏ qua nếu chưa có
+        }
+
+        const currentDiets: string[] = [];
+        const currentAllergies: Record<string, boolean> = {};
+
+        if (myPrefsObj) {
+          if (Array.isArray(myPrefsObj.preferreds)) {
+            myPrefsObj.preferreds.forEach((p: any) => {
+              currentDiets.push(p.healthTagId.toString());
+            });
+          }
+          if (Array.isArray(myPrefsObj.allergies)) {
+            myPrefsObj.allergies.forEach((p: any) => {
+              currentAllergies[p.healthTagId.toString()] = true;
+            });
+          }
+        }
+
+        setSelectedDiets(currentDiets);
+        setAllergies(currentAllergies);
+
+        // Load budget từ profile nếu có
+        if (profile?.spendingLimit) {
+          setAmount(profile.spendingLimit.toString());
+        }
+      } catch (err) {
+        console.warn('Lỗi load shopping preferences:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, [profile]);
 
   const sliderWidthRef = useRef(0);
   const amountRef = useRef(amount);
@@ -95,6 +163,42 @@ export default function ShoppingPreferencesScreenMain() {
     setAllergies(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      // Cập nhật health preferences
+      const preferences: HealthPreferenceItemDto[] = [];
+      
+      // Diets
+      selectedDiets.forEach(id => {
+        preferences.push({ healthTagId: Number(id), status: 'Preferred' });
+      });
+
+      // Allergies
+      Object.keys(allergies).forEach(id => {
+        if (allergies[id]) {
+          preferences.push({ healthTagId: Number(id), status: 'Allergy' });
+        }
+      });
+
+      await PersonalizationService.updateHealthPreferences(preferences);
+
+      // Cập nhật ngân sách
+      await PersonalizationService.updateBudget(Number(amount));
+      if (profile) {
+        // Update local context manually to avoid waiting for another network request
+        profile.spendingLimit = Number(amount);
+      }
+
+      ToastAndroid.show('Đã lưu tùy chọn mua sắm', ToastAndroid.SHORT);
+      router.back();
+    } catch (err: any) {
+      ToastAndroid.show(err.message || 'Có lỗi xảy ra', ToastAndroid.LONG);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <LinearGradient
       colors={['#F0FDF4', '#F8FAFC', '#F8FAFC']}
@@ -133,7 +237,7 @@ export default function ShoppingPreferencesScreenMain() {
             </View>
 
             <View style={styles.dietsGrid}>
-              {DIETS.map((diet) => {
+              {availableDiets.map((diet) => {
                 const isSelected = selectedDiets.includes(diet.id);
                 return (
                   <TouchableOpacity
@@ -165,15 +269,15 @@ export default function ShoppingPreferencesScreenMain() {
             </View>
 
             <View style={styles.allergiesList}>
-              {ALLERGIES.map((allergy) => {
-                const isOn = allergies[allergy.id];
+              {availableAllergies.map((allergy) => {
+                const isOn = allergies[allergy.id] || false;
                 return (
                   <View key={allergy.id} style={styles.allergyItem}>
                     <View style={styles.allergyIconBox}>
-                      <AlertTriangle color="#DC2626" size={16} strokeWidth={isOn ? 2.5 : 2} />
+                      <allergy.icon color="#DC2626" size={16} strokeWidth={isOn ? 2.5 : 2} />
                     </View>
                     <Text style={[styles.allergyText, isOn && styles.allergyTextActive]}>
-                      {allergy.name}
+                      Dị ứng {allergy.name}
                     </Text>
                     <Switch
                       value={isOn}
@@ -251,9 +355,15 @@ export default function ShoppingPreferencesScreenMain() {
 
           {/* Save Button */}
           <Animated.View entering={FadeInUp.delay(500)} style={styles.actionSection}>
-            <TouchableOpacity style={styles.btnSave}>
-              <Text style={styles.btnSaveText}>Lưu thay đổi</Text>
-              <Save color="white" size={20} />
+            <TouchableOpacity style={styles.btnSave} onPress={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Text style={styles.btnSaveText}>Lưu thay đổi</Text>
+                  <Save color="white" size={20} />
+                </>
+              )}
             </TouchableOpacity>
           </Animated.View>
 

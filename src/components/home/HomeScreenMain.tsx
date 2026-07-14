@@ -1,8 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery } from 'lucide-react-native';
+import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Animated as RNAnimated, Modal, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, FadeInRight, FadeInUp, SharedTransition, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,27 +11,68 @@ import { useIsFocused } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import { RobotService } from '../../services/RobotService';
 import { ProfileService, ProfileDto } from '../../services/ProfileService';
+import { CartService } from '../../services/CartService';
+import { PersonalizationService, RecipeDto } from '../../services/PersonalizationService';
+import { MealSuggestionService, MenuAssistantResponseDto } from '../../services/MealSuggestionService';
+import { useAuth } from '../../context/AuthContext';
+import { useNotification } from '../../context/NotificationContext';
+import { MemberAdService, SponsoredRecommendationDto } from '../../services/MemberAdService';
+import { AlertTriangle } from 'lucide-react-native';
+import Voice from '@react-native-voice/voice';
+import Svg, { Circle, G, Text as SvgText } from 'react-native-svg';
+const cleanSearchQuery = (query: string): string => {
+  if (!query) return '';
+  let cleaned = query.trim();
+  const lower = cleaned.toLowerCase();
+  const prefixes = [
+    'tôi muốn mua',
+    'tôi muốn tìm',
+    'tìm cho tôi',
+    'mua cho tôi',
+    'tìm kiếm',
+    'cho tôi',
+    'tôi cần',
+    'bán cho',
+    'kiếm',
+    'tìm',
+    'mua',
+    'có'
+  ];
+  for (const prefix of prefixes) {
+    if (lower.startsWith(prefix)) {
+      cleaned = cleaned.substring(prefix.length).trim();
+      break;
+    }
+  }
+  const suffixes = [' không', ' nhé', ' nha', ' ạ', ' với'];
+  for (const suffix of suffixes) {
+    if (cleaned.toLowerCase().endsWith(suffix)) {
+      cleaned = cleaned.substring(0, cleaned.length - suffix.length).trim();
+    }
+  }
+  return cleaned || query;
+};
 
 const getGreetingText = () => {
   const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
   const today = new Date();
   const dayName = dayNames[today.getDay()];
-  
+
   const greetings = [
-    'vui vẻ 🥗',
-    'ngập tràn niềm vui 🎉',
-    'tràn đầy năng lượng 💪',
-    'bình an ☀️',
-    'may mắn 🍀',
-    'hạnh phúc ❤️',
-    'ấm áp 🥰'
+    'vui vẻ',
+    'ngập tràn niềm vui',
+    'tràn đầy năng lượng',
+    'bình an',
+    'may mắn',
+    'hạnh phúc',
+    'ấm áp'
   ];
   const greetingText = greetings[today.getDay()];
-  
+
   return `${dayName} ${greetingText}`;
 };
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 // Data Mocks cho các phần khác (giữ nguyên AI recommend dummy)
 
@@ -90,33 +131,194 @@ export default function HomeScreenMain() {
   const [activeTab, setActiveTab] = useState('home');
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [meals, setMeals] = useState<RecipeDto[]>([]);
+  const [loadingMeals, setLoadingMeals] = useState(true);
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileDto | null>(null);
+  const { profile, refreshProfile } = useAuth();
+  const { unreadCount } = useNotification();
   const userTier = (profile?.membershipTier || 'MEMBER').toUpperCase();
   const tierTheme = getTierTheme(userTier);
   const insets = useSafeAreaInsets();
+
+  // Recipe Assistant Modal states
+  const [selectedRecipe, setSelectedRecipe] = useState<RecipeDto | null>(null);
+  const [recipeModalVisible, setRecipeModalVisible] = useState(false);
+  const [portions, setPortions] = useState(2);
+  const [loadingAssistant, setLoadingAssistant] = useState(false);
+  const [assistantData, setAssistantData] = useState<MenuAssistantResponseDto | null>(null);
+  const [addingToCart, setAddingToCart] = useState(false);
   const [selectedRobotName, setSelectedRobotName] = useState<string | null>(null);
   const [selectedRobotCode, setSelectedRobotCode] = useState<string | null>(null);
   const [robotBattery, setRobotBattery] = useState<number | null>(null);
   const [robotStatus, setRobotStatus] = useState<string | null>(null);
+  const [sponsoredAds, setSponsoredAds] = useState<SponsoredRecommendationDto[]>([]);
+  const [loadingAds, setLoadingAds] = useState(true);
 
-  const isFocused = useIsFocused();
+  const [isListening, setIsListening] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const pulseAnim = React.useRef(new RNAnimated.Value(1)).current;
 
-  const fetchProfile = async () => {
+  useEffect(() => {
     try {
-      const data = await ProfileService.getProfile();
-      setProfile(data);
-    } catch (error) {
-      console.warn('Error fetching profile in home screen:', error);
+      Voice.onSpeechStart = () => setIsListening(true);
+      Voice.onSpeechEnd = () => setIsListening(false);
+      Voice.onSpeechPartialResults = (e) => {
+        if (e.value && e.value.length > 0) {
+          setVoiceText(e.value[0]);
+        }
+      };
+      Voice.onSpeechResults = (e) => {
+        if (e.value && e.value.length > 0) {
+          const resultText = e.value[0];
+          setVoiceText(resultText);
+          setTimeout(() => {
+            setIsListening(false);
+            const cleanedQuery = cleanSearchQuery(resultText);
+            router.push({ pathname: '/search', params: { query: cleanedQuery, mode: searchMode } });
+          }, 1000);
+        }
+      };
+      Voice.onSpeechError = (e) => {
+        setIsListening(false);
+        ToastAndroid.show('Không thể nhận diện giọng nói', ToastAndroid.SHORT);
+      };
+    } catch(err) {
+      console.warn("Voice module not available yet", err);
+    }
+    return () => {
+      try {
+        Voice.destroy().then(Voice.removeAllListeners);
+      } catch(err) {}
+    };
+  }, [searchMode]);
+
+  useEffect(() => {
+    if (isListening) {
+      RNAnimated.loop(
+        RNAnimated.sequence([
+          RNAnimated.timing(pulseAnim, { toValue: 1.5, duration: 1000, useNativeDriver: true }),
+          RNAnimated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true })
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isListening]);
+
+  const startListening = async () => {
+    try {
+      setVoiceText('');
+      setIsListening(true);
+      await Voice.start('vi-VN');
+    } catch (e) {
+      console.error(e);
+      ToastAndroid.show('Mô phỏng Voice (chưa link native module)', ToastAndroid.SHORT);
+      setTimeout(() => setVoiceText('Sữa chua không đường'), 2000);
+      setTimeout(() => {
+        setIsListening(false);
+        router.push({ pathname: '/search', params: { query: 'Sữa chua không đường', mode: searchMode } });
+      }, 3500);
     }
   };
+
+  const stopListening = async () => {
+    try {
+      setIsListening(false);
+      await Voice.stop();
+      if (voiceText) {
+        const cleaned = cleanSearchQuery(voiceText);
+        router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+      }
+    } catch (e) {
+      setIsListening(false);
+    }
+  };
+
+  const openRecipeAssistant = (recipe: RecipeDto) => {
+    setSelectedRecipe(recipe);
+    setPortions(recipe.yieldPortions || 2);
+    setRecipeModalVisible(true);
+    loadMenuAssistant(recipe.recipeId, recipe.yieldPortions || 2);
+  };
+
+  const loadMenuAssistant = async (recipeId: number, portionsCount: number) => {
+    try {
+      setLoadingAssistant(true);
+      const data = await MealSuggestionService.getMenuAssistant(recipeId, portionsCount);
+      setAssistantData(data);
+    } catch (e) {
+      console.error('Error fetching recipe assistant details:', e);
+      ToastAndroid.show('Không thể tải thông tin công thức', ToastAndroid.SHORT);
+    } finally {
+      setLoadingAssistant(false);
+    }
+  };
+
+  const changePortions = (delta: number) => {
+    if (!selectedRecipe) return;
+    const newPortions = Math.max(1, Math.min(20, portions + delta));
+    setPortions(newPortions);
+    loadMenuAssistant(selectedRecipe.recipeId, newPortions);
+  };
+
+  const handleAddAllIngredientsToCart = async () => {
+    if (!assistantData || !assistantData.ingredients) return;
+    const inStockItems = assistantData.ingredients.filter(ing => ing.inStock);
+    if (inStockItems.length === 0) {
+      Alert.alert('Thông báo', 'Tất cả nguyên liệu cần thiết cho món ăn này hiện tại đều đã hết hàng.');
+      return;
+    }
+    
+    try {
+      setAddingToCart(true);
+      // Add all available items in parallel
+      await Promise.all(inStockItems.map(item => CartService.addItem(item.productId, item.quantityRequired)));
+      
+      setRecipeModalVisible(false);
+      
+      Alert.alert(
+        'Đã thêm vào giỏ hàng',
+        `Đã thêm thành công ${inStockItems.length} nguyên liệu có sẵn vào giỏ hàng! Bạn có muốn mở Bản đồ Siêu thị để Robot dẫn đường đi gom đồ không?`,
+        [
+          { text: 'Để sau', style: 'cancel' },
+          { 
+            text: 'Đồng ý', 
+            onPress: () => {
+              const mockInvoice = {
+                items: inStockItems.map(i => ({ productName: i.productName })),
+                totalPrice: assistantData.estimatedTotalCost
+              };
+              const nodeIdsStr = assistantData.optimizedShoppingRoute ? assistantData.optimizedShoppingRoute.join(',') : '';
+              
+              router.push({
+                pathname: '/map',
+                params: {
+                  invoice: JSON.stringify(mockInvoice),
+                  nodeIds: nodeIdsStr
+                }
+              });
+            }
+          }
+        ]
+      );
+    } catch (e: any) {
+      console.error('Error adding ingredients to cart:', e);
+      Alert.alert('Thất bại', e.message || 'Có lỗi xảy ra khi thêm nguyên liệu vào giỏ hàng.');
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     if (isFocused) {
       checkConnectedRobot();
-      fetchProfile();
+      refreshProfile();
+      fetchProducts();
+      fetchSponsoredAds();
     }
-  }, [isFocused]);
+  }, [isFocused, searchMode]);
 
   const checkConnectedRobot = async () => {
     try {
@@ -142,21 +344,59 @@ export default function HomeScreenMain() {
     }
   };
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  const fetchSponsoredAds = async () => {
+    try {
+      setLoadingAds(true);
+      if (profile?.memberId) {
+        // Lấy quảng cáo được tài trợ, có truyền memberId để check dị ứng
+        const ads = await MemberAdService.getSponsoredRecommendations(profile.memberId as number);
+        setSponsoredAds(ads);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch sponsored ads:', e);
+    } finally {
+      setLoadingAds(false);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      const data = await ProductService.getProducts();
-      setProducts(data);
+      let data;
+      if (searchMode === 'personal') {
+        data = await PersonalizationService.getPersonalizedProducts();
+      } else {
+        data = await ProductService.getProducts();
+      }
+      setProducts(data as any);
     } catch (error) {
       console.error('Error fetching products:', error);
+      if (searchMode === 'personal') {
+        const fallbackData = await ProductService.getProducts();
+        setProducts(fallbackData);
+      }
     } finally {
       setLoadingProducts(false);
     }
   };
+
+  const fetchMeals = async () => {
+    try {
+      setLoadingMeals(true);
+      const data = await PersonalizationService.getPersonalizedMeals();
+      setMeals(data);
+    } catch (error) {
+      console.error('Error fetching meals:', error);
+    } finally {
+      setLoadingMeals(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isFocused) {
+      fetchMeals();
+    }
+  }, [isFocused]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -166,7 +406,7 @@ export default function HomeScreenMain() {
         <View style={styles.header}>
           <TouchableOpacity style={styles.userInfo} onPress={() => router.push('/profile')}>
             <View style={styles.avatarContainer}>
-              <Image source={{ uri: profile?.facePath || 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779363905/DepTrai_lriqvy.png' }} style={styles.avatar} />
+              <Image source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }} style={styles.avatar} />
               <View style={[styles.badge, { backgroundColor: tierTheme.badgeBg }]}>
                 <Text style={styles.badgeText}>{tierTheme.badgeText}</Text>
               </View>
@@ -180,7 +420,13 @@ export default function HomeScreenMain() {
             <Animated.View style={styles.iconButton} sharedTransitionTag="shared-bell-icon">
               <TouchableOpacity style={{ flex: 1, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }} onPress={() => router.push('/notifications')}>
                 <Bell color="#4B5563" size={22} />
-                <View style={styles.notificationDot} />
+                {unreadCount > 0 && (
+                  <View style={styles.notificationDot}>
+                    <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             </Animated.View>
             <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/profile')}>
@@ -189,29 +435,7 @@ export default function HomeScreenMain() {
           </View>
         </View>
 
-        {/* Summary Cards */}
-        <Animated.View entering={FadeInDown.delay(200)} style={styles.summaryContainer}>
-          <View style={styles.summaryCard}>
-            <View style={[styles.summaryIconBox, { backgroundColor: '#FFEDD5' }]}>
-              <Star color="#EA580C" size={20} fill="#EA580C" />
-            </View>
-            <View>
-              <Text style={styles.summaryLabel}>Điểm tích lũy</Text>
-              <Text style={styles.summaryValue}>
-                {profile?.totalPoints !== undefined ? profile.totalPoints.toLocaleString('vi-VN') : '0'}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.summaryCard}>
-            <View style={[styles.summaryIconBox, { backgroundColor: '#DCFCE7' }]}>
-              <Wallet color="#16A34A" size={20} />
-            </View>
-            <View>
-              <Text style={styles.summaryLabel}>Tiết kiệm tháng</Text>
-              <Text style={styles.summaryValue}>450k đ</Text>
-            </View>
-          </View>
-        </Animated.View>
+
 
         {/* Search Section */}
         <Animated.View entering={FadeInDown.delay(300)} style={styles.searchSection}>
@@ -246,7 +470,7 @@ export default function HomeScreenMain() {
                 }
               }}
             />
-            <TouchableOpacity style={styles.actionIcon}>
+            <TouchableOpacity style={styles.actionIcon} onPress={startListening}>
               <Mic color="#059669" size={20} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionIcon}>
@@ -261,59 +485,69 @@ export default function HomeScreenMain() {
             <Text style={styles.sectionTitle}>Tiện ích thông minh</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-            {/* Card 1 */}
-            <View style={styles.smartCard}>
-              <View style={styles.smartCardImageWrapper}>
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?q=80&w=600&auto=format&fit=crop' }} style={styles.smartCardImage} />
-                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)']} style={styles.smartCardOverlay}>
-                  <View style={styles.smartBadge}>
-                    <Text style={styles.smartBadgeText} numberOfLines={1}>Lập kế hoạch bữa ăn thông minh</Text>
-                  </View>
-                  <Text style={styles.smartCardTitle} numberOfLines={1}> Salad cá hồi sốt cam chanh</Text>
-                </LinearGradient>
+            {/* Personalized Meals */}
+            {loadingMeals ? (
+              <View style={[styles.smartCard, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="small" color="#059669" />
               </View>
-              <View style={styles.smartCardFooter}>
-                <Text style={styles.smartCardDesc}>Thực đơn lành mạnh cho 4 người</Text>
-                <View style={styles.smartCardActions}>
-                  <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/robots')}>
-                    <Text style={styles.btnPrimaryText}>Xem lộ trình</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.btnSecondary}>
-                    <Text style={styles.btnSecondaryText}>Tối ưu</Text>
-                  </TouchableOpacity>
+            ) : meals.length > 0 ? (
+              meals.map((meal) => (
+                <View key={meal.recipeId} style={styles.smartCard}>
+                  <View style={styles.smartCardImageWrapper}>
+                    <Image source={{ uri: meal.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop' }} style={styles.smartCardImage} />
+                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)']} style={styles.smartCardOverlay}>
+                      <View style={styles.smartBadge}>
+                        <Zap color="white" size={10} style={{ marginRight: 4 }} />
+                        <Text style={styles.smartBadgeText} numberOfLines={1}>
+                          Khớp {meal.matchScore}%
+                        </Text>
+                      </View>
+                      <Text style={styles.smartCardTitle} numberOfLines={1}>{meal.recipeName}</Text>
+                    </LinearGradient>
+                  </View>
+                  <View style={styles.smartCardFooter}>
+                    <Text style={styles.smartCardDesc} numberOfLines={1}>
+                      {meal.matchReasons?.[0] || `K.Phần: ${meal.yieldPortions} người • ${meal.calories ? meal.calories + ' kcal' : 'Ngon miệng'}`}
+                    </Text>
+                    <View style={styles.smartCardActions}>
+                      <TouchableOpacity style={styles.btnPrimary} onPress={() => openRecipeAssistant(meal)}>
+                        <Text style={styles.btnPrimaryText}>Nấu ngay</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.btnSecondary} onPress={() => openRecipeAssistant(meal)}>
+                        <Text style={styles.btnSecondaryText}>Chi tiết</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.smartCard}>
+                <View style={styles.smartCardImageWrapper}>
+                  <Image source={{ uri: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?q=80&w=600&auto=format&fit=crop' }} style={styles.smartCardImage} />
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)']} style={styles.smartCardOverlay}>
+                    <View style={styles.smartBadge}>
+                      <Text style={styles.smartBadgeText} numberOfLines={1}>Lập kế hoạch bữa ăn thông minh</Text>
+                    </View>
+                    <Text style={styles.smartCardTitle} numberOfLines={1}> Salad cá hồi sốt cam chanh</Text>
+                  </LinearGradient>
+                </View>
+                <View style={styles.smartCardFooter}>
+                  <Text style={styles.smartCardDesc}>
+                    Ngân sách tuần: {profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa thiết lập'}
+                  </Text>
+                  <View style={styles.smartCardActions}>
+                    <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/robots')}>
+                      <Text style={styles.btnPrimaryText}>Xem lộ trình</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.btnSecondary}>
+                      <Text style={styles.btnSecondaryText}>Tối ưu</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
 
-            {/* Card 2 */}
-            <LinearGradient
-              colors={tierTheme.gradient as unknown as readonly [string, string, ...string[]]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.cartCardGradient}
-            >
-              <TouchableOpacity activeOpacity={0.9} style={styles.cartCardInner} onPress={() => router.push('/cart')}>
-                <View style={styles.cartHeaderRow}>
-                  <View style={styles.cartIconBox}>
-                    <ShoppingBag color="#059669" size={22} />
-                  </View>
-                  <View style={styles.cartBadge}>
-                    <Text style={styles.cartBadgeText}>Tiết kiệm 15%</Text>
-                  </View>
-                </View>
-                <Text style={styles.cartTitle}>Giỏ hàng</Text>
-                <Text style={styles.cartSubtitle}>Đã có 3/8 sản phẩm</Text>
 
-                <View style={styles.cartProgressTrack}>
-                  <View style={[styles.cartProgressFill, { width: '37.5%', backgroundColor: tierTheme.badgeBg }]} />
-                </View>
-
-                <View style={styles.cartButton}>
-                  <Navigation color="white" size={16} fill="white" style={{ marginRight: 8 }} />
-                  <Text style={styles.cartButtonText}>Đến gian hàng ngay</Text>
-                </View>
-              </TouchableOpacity>
-            </LinearGradient>
           </ScrollView>
         </Animated.View>
 
@@ -325,34 +559,101 @@ export default function HomeScreenMain() {
               <Text style={styles.budgetSubtitle}>Cập nhật 5 phút trước</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.budgetValue}>1.2tr / 2tr vnđ</Text>
-              <View style={styles.budgetStatusBadge}>
-                <Text style={styles.budgetStatusText}>Sắp đạt hạn mức</Text>
+              <Text style={styles.budgetValue}>
+                {profile?.spendingLimit ? `0đ / ${(profile.spendingLimit / 1000000).toFixed(1)}tr vnđ` : 'Chưa thiết lập'}
+              </Text>
+              <View style={[styles.budgetStatusBadge, !profile?.spendingLimit && { backgroundColor: '#F3F4F6' }]}>
+                <Text style={[styles.budgetStatusText, !profile?.spendingLimit && { color: '#6B7280' }]}>
+                  {profile?.spendingLimit ? 'Vẫn trong ngân sách' : 'Thiết lập ngay'}
+                </Text>
               </View>
             </View>
           </View>
 
-          {/* Chart Mockup */}
-          <View style={styles.chartContainer}>
-            {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((day, index) => {
-              const heights = [30, 50, 70, 100, 20, 40, 30]; // % heights
-              const isToday = day === 'T5';
-              return (
-                <View key={day} style={styles.chartBarCol}>
-                  <View style={styles.chartBarWrapper}>
-                    {isToday && (
-                      <View style={styles.chartTodayBadge}>
-                        <Text style={styles.chartTodayText}>T5</Text>
-                      </View>
-                    )}
-                    <View style={[styles.chartBar, { height: `${heights[index]}%`, backgroundColor: isToday ? '#10B981' : '#D1FAE5' }]} />
-                  </View>
-                  <Text style={[styles.chartDayText, isToday && styles.chartDayTextActive]}>{day}</Text>
-                </View>
-              );
-            })}
+          <View style={styles.budgetGaugeContainer}>
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={200} height={100} viewBox="0 0 200 100">
+                {/* Background arc */}
+                <Circle
+                  cx="100"
+                  cy="100"
+                  r="80"
+                  fill="none"
+                  stroke="#E5E7EB"
+                  strokeWidth="14"
+                  strokeLinecap="round"
+                  strokeDasharray="251 251"
+                  strokeDashoffset="0"
+                />
+                {/* Foreground arc (0%) */}
+                <Circle
+                  cx="100"
+                  cy="100"
+                  r="80"
+                  fill="none"
+                  stroke="#059669"
+                  strokeWidth="14"
+                  strokeLinecap="round"
+                  strokeDasharray="251 251"
+                  strokeDashoffset="251"
+                />
+              </Svg>
+              <View style={styles.budgetGaugeTextContainer}>
+                <Text style={styles.budgetGaugeSpent}>0đ</Text>
+                <Text style={styles.budgetGaugeLabel}>Đã chi tiêu</Text>
+              </View>
+            </View>
+            <View style={styles.budgetGaugeDetails}>
+              <Text style={styles.budgetGaugeDetailText}>
+                Ngân sách: <Text style={{ fontWeight: '700', color: '#111827' }}>{profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa đặt'}</Text>
+              </Text>
+              <Text style={[styles.budgetGaugeDetailText, { color: '#059669', fontWeight: 'bold' }]}>
+                Còn lại: {profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : '0đ'}
+              </Text>
+            </View>
           </View>
         </Animated.View>
+
+        {/* Sponsored Ads */}
+        {sponsoredAds.length > 0 && (
+          <Animated.View entering={FadeInRight.delay(550)}>
+            <View style={[styles.sectionHeader, { marginTop: 16 }]}>
+              <Text style={[styles.sectionTitle, { color: '#EAB308' }]}>Tài trợ nổi bật</Text>
+              <View style={{ backgroundColor: '#FEF08A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                <Text style={{ fontSize: 10, color: '#A16207', fontWeight: 'bold' }}>AD</Text>
+              </View>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {sponsoredAds.map((ad, idx) => (
+                <TouchableOpacity
+                  key={`ad-${ad.sponsoredId}-${idx}`}
+                  style={[styles.smartCard, { width: width * 0.6 }]}
+                  activeOpacity={0.9}
+                  onPress={() => router.push({ pathname: '/product', params: { id: ad.productId } })}
+                >
+                  <View style={styles.smartCardImageWrapper}>
+                    <Image source={{ uri: ad.imageUrl }} style={styles.smartCardImage} />
+                    {ad.allergyWarning && (
+                      <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(239,68,68,0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexDirection: 'row', alignItems: 'center' }}>
+                        <AlertTriangle color="white" size={12} style={{ marginRight: 4 }} />
+                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>Dị ứng</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.smartCardFooter, { padding: 12 }]}>
+                    <Text style={[styles.smartCardTitle, { color: '#111827', fontSize: 16 }]} numberOfLines={1}>{ad.productName}</Text>
+                    <Text style={[styles.productPrice, { marginTop: 4, fontSize: 14 }]}>{ad.productPrice.toLocaleString('vi-VN')} đ</Text>
+                    {ad.allergyWarning && (
+                      <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }} numberOfLines={1}>
+                        Chứa: {ad.allergyDetails}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
 
         {/* Promotions */}
         <Animated.View entering={FadeInUp.delay(600)} style={styles.promoSection}>
@@ -370,16 +671,16 @@ export default function HomeScreenMain() {
               <Text style={{ textAlign: 'center', marginVertical: 20, color: '#6B7280' }}>Không có sản phẩm nào</Text>
             ) : (
               products.map(product => (
-                <TouchableOpacity 
-                  key={product.productId} 
+                <TouchableOpacity
+                  key={product.productId}
                   style={styles.productCard}
                   activeOpacity={0.8}
                   onPress={() => router.push({ pathname: '/product', params: { id: product.productId } })}
                 >
                   <View style={styles.productImageContainer}>
-                    <Image 
-                      source={product.imageUrl ? { uri: product.imageUrl } : { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop' }} 
-                      style={styles.productImage} 
+                    <Image
+                      source={product.imageUrl ? { uri: product.imageUrl } : { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop' }}
+                      style={styles.productImage}
                     />
                     <View style={styles.aiRecommendBadge}>
                       <Zap color="white" size={10} fill="white" style={{ marginRight: 4 }} />
@@ -391,7 +692,17 @@ export default function HomeScreenMain() {
                     <Text style={styles.productSubtitle}>Trạng thái: {product.status}</Text>
                     <View style={styles.productPriceRow}>
                       <Text style={styles.productPrice}>{product.unitPrice.toLocaleString('vi-VN')} đ</Text>
-                      <TouchableOpacity style={styles.addButton}>
+                      <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={async () => {
+                          try {
+                            await CartService.addItem(product.productId, 1);
+                            ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
+                          } catch (e: any) {
+                            ToastAndroid.show(e.message, ToastAndroid.LONG);
+                          }
+                        }}
+                      >
                         <Plus color="white" size={16} />
                       </TouchableOpacity>
                     </View>
@@ -439,6 +750,147 @@ export default function HomeScreenMain() {
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Voice Search Modal */}
+      {isListening && (
+        <View style={styles.voiceModalOverlay}>
+          <View style={styles.voiceModalContent}>
+            <View style={{position: 'relative', width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 24}}>
+              <RNAnimated.View style={[styles.voicePulseCircle, { transform: [{ scale: pulseAnim }] }]} />
+              <View style={styles.voiceMicContainer}>
+                <Mic color="white" size={32} />
+              </View>
+            </View>
+            <Text style={styles.voiceListeningText}>Đang nghe...</Text>
+            <Text style={styles.voiceResultText}>{voiceText || 'Hãy nói nội dung bạn muốn tìm kiếm'}</Text>
+            <TouchableOpacity style={styles.voiceCancelBtn} onPress={stopListening}>
+              <Text style={styles.voiceCancelBtnText}>Dừng lại</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Recipe Details & Ingredients modal ("Nấu ngay") */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={recipeModalVisible}
+        onRequestClose={() => setRecipeModalVisible(false)}
+      >
+        <View style={styles.recipeModalOverlay}>
+          <View style={styles.recipeModalContent}>
+            {/* Header with image */}
+            <View style={styles.recipeHeaderWrapper}>
+              <Image
+                source={{ uri: selectedRecipe?.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop' }}
+                style={styles.recipeModalImage}
+              />
+              <LinearGradient colors={['transparent', 'rgba(15, 23, 42, 0.9)']} style={styles.recipeImageGradient}>
+                <View style={styles.recipeTitleRow}>
+                  <Text style={styles.recipeTitleText} numberOfLines={2}>
+                    {selectedRecipe?.recipeName || 'Công thức chi tiết'}
+                  </Text>
+                  {selectedRecipe?.matchScore && (
+                    <View style={styles.recipeScoreBadge}>
+                      <Text style={styles.recipeScoreText}>Hợp {selectedRecipe.matchScore}%</Text>
+                    </View>
+                  )}
+                </View>
+              </LinearGradient>
+              <TouchableOpacity style={styles.recipeCloseBtn} onPress={() => setRecipeModalVisible(false)}>
+                <X color="white" size={20} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Portions adjustments */}
+            <View style={styles.recipePortionRow}>
+              <View>
+                <Text style={styles.portionLabel}>Khẩu phần ăn</Text>
+                <Text style={styles.portionSub}>Điều chỉnh lượng nguyên liệu</Text>
+              </View>
+              <View style={styles.portionControlGroup}>
+                <TouchableOpacity style={styles.portionBtn} onPress={() => changePortions(-1)} disabled={loadingAssistant}>
+                  <Text style={styles.portionBtnText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.portionValue}>{portions}</Text>
+                <TouchableOpacity style={styles.portionBtn} onPress={() => changePortions(1)} disabled={loadingAssistant}>
+                  <Text style={styles.portionBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {loadingAssistant ? (
+              <View style={styles.recipeLoadingContainer}>
+                <ActivityIndicator size="large" color="#059669" />
+                <Text style={styles.recipeLoadingText}>Đang tính toán nguyên liệu tối ưu...</Text>
+              </View>
+            ) : (
+              <View style={{ flex: 1, width: '100%' }}>
+                {/* Ingredients list */}
+                <Text style={styles.ingredientsSectionTitle}>Danh sách nguyên liệu cần thiết</Text>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
+                  {assistantData?.ingredients && assistantData.ingredients.length > 0 ? (
+                    assistantData.ingredients.map((ing, idx) => (
+                      <View key={`ing-${ing.productId}-${idx}`} style={styles.ingredientRowCard}>
+                        <Image
+                          source={{ uri: ing.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=200&auto=format&fit=crop' }}
+                          style={styles.ingredientImg}
+                        />
+                        <View style={styles.ingredientInfoBox}>
+                          <Text style={styles.ingredientNameText} numberOfLines={1}>{ing.productName}</Text>
+                          <Text style={styles.ingredientQtyText}>
+                            Yêu cầu: {ing.quantityRequired} {ing.unitOfMeasure} {ing.shelfLocation ? `• Kệ: ${ing.shelfLocation}` : ''}
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+                          <Text style={styles.ingredientPriceText}>{(ing.unitPrice * ing.quantityRequired).toLocaleString('vi-VN')} đ</Text>
+                          <View style={[styles.stockBadge, { backgroundColor: ing.inStock ? '#E6F4EA' : '#FCE8E6' }]}>
+                            <Text style={[styles.stockBadgeText, { color: ing.inStock ? '#137333' : '#C5221F' }]}>
+                              {ing.inStock ? 'Còn hàng' : 'Hết hàng'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.emptyText}>Không tìm thấy nguyên liệu phù hợp trong kho.</Text>
+                  )}
+                </ScrollView>
+
+                {/* Bottom summary and action */}
+                <View style={styles.recipeModalFooter}>
+                  <View style={styles.priceSummaryRow}>
+                    <Text style={styles.totalPriceLabel}>Dự tính chi phí:</Text>
+                    <Text style={styles.totalPriceValue}>
+                      {assistantData?.estimatedTotalCost ? assistantData.estimatedTotalCost.toLocaleString('vi-VN') + ' VNĐ' : '0 VNĐ'}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.recipeFooterActions}>
+                    <TouchableOpacity style={styles.recipeCancelActionBtn} onPress={() => setRecipeModalVisible(false)}>
+                      <Text style={styles.recipeCancelActionText}>Đóng</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.recipeSubmitActionBtn, addingToCart && { opacity: 0.7 }]}
+                      onPress={handleAddAllIngredientsToCart}
+                      disabled={addingToCart}
+                    >
+                      {addingToCart ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <>
+                          <Bot color="white" size={18} style={{ marginRight: 6 }} />
+                          <Text style={styles.recipeSubmitActionText}>Mua & Gom hàng</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -525,12 +977,15 @@ const styles = StyleSheet.create({
   },
   notificationDot: {
     position: 'absolute',
-    top: 10,
-    right: 12,
-    width: 8,
-    height: 8,
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#EF4444',
-    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
     borderWidth: 1,
     borderColor: 'white',
   },
@@ -691,6 +1146,60 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 10,
     fontWeight: '800',
+  },
+  voiceModalOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    elevation: 999,
+  },
+  voiceModalContent: {
+    backgroundColor: 'white',
+    padding: 32,
+    borderRadius: 24,
+    alignItems: 'center',
+    width: '80%',
+  },
+  voicePulseCircle: {
+    position: 'absolute',
+    width: 80, height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+  },
+  voiceMicContainer: {
+    width: 64, height: 64,
+    borderRadius: 32,
+    backgroundColor: '#059669',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+  },
+  voiceListeningText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  voiceResultText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 32,
+    minHeight: 40,
+  },
+  voiceCancelBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+  },
+  voiceCancelBtnText: {
+    color: '#4B5563',
+    fontWeight: '600',
+    fontSize: 15,
   },
   smartCardTitle: {
     color: 'white',
@@ -855,57 +1364,40 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  chartContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 160,
-    paddingTop: 40,
-    marginTop: 16,
+  budgetGaugeContainer: {
+    marginTop: 24,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
-  },
-  chartBarCol: {
+    paddingTop: 24,
     alignItems: 'center',
-    flex: 1,
   },
-  chartBarWrapper: {
-    height: 100,
+  budgetGaugeTextContainer: {
+    position: 'absolute',
+    bottom: 0,
+    alignItems: 'center',
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginBottom: 12,
-    position: 'relative'
   },
-  chartBar: {
-    width: 24,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 4,
+  budgetGaugeSpent: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#111827',
   },
-  chartDayText: {
+  budgetGaugeLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#6B7280',
+    marginTop: 2,
     fontWeight: '600',
   },
-  chartDayTextActive: {
-    color: '#111827',
-    fontWeight: '800',
-  },
-  chartTodayBadge: {
-    position: 'absolute',
-    top: -28,
-    backgroundColor: '#10B981',
+  budgetGaugeDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 20,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    zIndex: 10,
   },
-  chartTodayText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: '800',
+  budgetGaugeDetailText: {
+    fontSize: 13,
+    color: '#4B5563',
   },
   promoSection: {
     marginTop: 32,
@@ -1153,5 +1645,258 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '700',
+  },
+  // Recipe Modal Styles
+  recipeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  recipeModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 20,
+    maxHeight: height * 0.9,
+    alignItems: 'center',
+  },
+  recipeHeaderWrapper: {
+    width: '100%',
+    height: 180,
+    borderRadius: 24,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 16,
+  },
+  recipeModalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  recipeImageGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: '40%',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  recipeTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  recipeTitleText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: 'white',
+    flex: 1,
+    marginRight: 12,
+  },
+  recipeScoreBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  recipeScoreText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  recipeCloseBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    borderRadius: 20,
+    padding: 6,
+  },
+  recipePortionRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 12,
+  },
+  portionLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  portionSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  portionControlGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    padding: 4,
+  },
+  portionBtn: {
+    width: 32,
+    height: 32,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  portionBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  portionValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1E293B',
+    paddingHorizontal: 16,
+  },
+  recipeLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  recipeLoadingText: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  ingredientsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  ingredientRowCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  ingredientImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#E2E8F0',
+  },
+  ingredientInfoBox: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center',
+  },
+  ingredientNameText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  ingredientQtyText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  ingredientPriceText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  stockBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  stockBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#64748B',
+    marginVertical: 20,
+    fontWeight: '500',
+  },
+  recipeModalFooter: {
+    width: '100%',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    backgroundColor: 'white',
+  },
+  priceSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  totalPriceLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  totalPriceValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  recipeFooterActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  recipeCancelActionBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipeCancelActionText: {
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recipeSubmitActionBtn: {
+    flex: 2,
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  recipeSubmitActionText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '800',
   }
 });

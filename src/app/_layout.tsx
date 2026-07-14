@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import React from 'react';
 import { LogBox } from 'react-native';
 import { AuthProvider } from '../context/AuthContext';
+import { NotificationProvider } from '../context/NotificationContext';
 
 LogBox.ignoreLogs([
   "SafeAreaView has been deprecated",
@@ -10,11 +11,13 @@ LogBox.ignoreLogs([
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <Stack screenOptions={{ 
-        headerShown: false
-      }}>
-        <Stack.Screen name="index" />
-      </Stack>
+      <NotificationProvider>
+        <Stack screenOptions={{ 
+          headerShown: false
+        }}>
+          <Stack.Screen name="index" />
+        </Stack>
+      </NotificationProvider>
     </AuthProvider>
   );
 }

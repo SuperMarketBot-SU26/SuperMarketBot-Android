@@ -17,13 +17,15 @@
         "monochromeImage": "./assets/images/logo.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.truongduyyyy.SmartMarketBot"
+      "package": "com.truongduyyyy.SmartMarketBot",
+      "permissions": ["android.permission.RECORD_AUDIO"]
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/logo.png"
     },
     "plugins": [
+      "@react-native-voice/voice",
       "expo-router",
       [
         "expo-splash-screen",

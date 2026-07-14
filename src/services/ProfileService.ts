@@ -5,6 +5,7 @@ export interface ProfileDto {
   memberId?: number;
   fullName: string;
   phone: string;
+  avatarUrl?: string;
   facePath?: string;
   imageBase64?: string;
   totalPoints?: number;
@@ -27,7 +28,14 @@ export class ProfileService {
   static async getProfile(): Promise<ProfileDto> {
     const headers = await getAuthHeaders();
     console.log(`[ProfileService.getProfile] GET ${BASE_URL}/api/members/me`);
-    const response = await fetch(`${BASE_URL}/api/members/me`, { headers });
+    const response = await fetch(`${BASE_URL}/api/members/me?t=${Date.now()}`, { 
+      headers: {
+        ...headers,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      } 
+    });
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -85,5 +93,58 @@ export class ProfileService {
       return [];
     }
     return response.json();
+  }
+
+  static async uploadAvatar(imageUri: string): Promise<string> {
+    const token = await SecureStore.getItemAsync('userToken');
+    
+    // Tạo FormData
+    const formData = new FormData();
+    const filename = imageUri.split('/').pop() || 'avatar.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+    formData.append('file', {
+      uri: imageUri,
+      name: filename,
+      type,
+    } as any);
+
+    console.log(`[ProfileService.uploadAvatar] PUT ${BASE_URL}/api/members/me/avatar`);
+    const response = await fetch(`${BASE_URL}/api/members/me/avatar`, {
+      method: 'PUT',
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // KHÔNG set Content-Type, fetch sẽ tự động set boundaries cho multipart/form-data
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[ProfileService.uploadAvatar] Error:`, errorText);
+      throw new Error(`Tải ảnh lên thất bại (${response.status})`);
+    }
+
+    const data = await response.json();
+    return data.avatarUrl; // Trả về link avatar mới
+  }
+
+  static async deleteAvatar(): Promise<boolean> {
+    const headers = await getAuthHeaders();
+    console.log(`[ProfileService.deleteAvatar] DELETE ${BASE_URL}/api/members/me/avatar`);
+    const response = await fetch(`${BASE_URL}/api/members/me/avatar`, {
+      method: 'DELETE',
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[ProfileService.deleteAvatar] Error:`, errorText);
+      throw new Error(`Xóa ảnh thất bại (${response.status})`);
+    }
+
+    return true;
   }
 }

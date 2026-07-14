@@ -6,16 +6,27 @@ import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View }
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import * as SecureStore from 'expo-secure-store';
+import { PersonalizationService } from '../../services/PersonalizationService';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
-const DIET_OPTIONS = [
-  { id: '1', title: 'Ăn chay', subtitle: '100% thực vật, không thịt cá', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779357368/vegan_lnakmy.jpg', icon: Leaf },
-  { id: '2', title: 'Kiêng đường', subtitle: 'Hạn chế thực phẩm nhiều đường', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358369/NoSugar_mxgmes.jpg', icon: Coffee },
-  { id: '3', title: 'Organic', subtitle: 'Thực phẩm hữu cơ, sạch 100%', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358450/Organic_otwq79.jpg', icon: Sprout },
-  { id: '4', title: 'Eat Clean', subtitle: 'Ưu tiên thực phẩm tươi, ít chế biến', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358480/EatClean_tuseaq.jpg', icon: Fish },
-];
+const DIET_UI_MAP: Record<number, { subtitle: string, image: string, icon: any }> = {
+  8: { subtitle: '100% thực vật, không thịt cá', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779357368/vegan_lnakmy.jpg', icon: Leaf },
+  6: { subtitle: 'Hạn chế tinh bột và đường', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358369/NoSugar_mxgmes.jpg', icon: Coffee },
+  10: { subtitle: 'Thực phẩm chuẩn Halal', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358450/Organic_otwq79.jpg', icon: Sprout },
+  7: { subtitle: 'Ưu tiên thực phẩm giàu đạm', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358480/EatClean_tuseaq.jpg', icon: Fish },
+};
+
+const DEFAULT_DIET_UI = { subtitle: 'Chế độ ăn tuỳ chọn', image: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358450/Organic_otwq79.jpg', icon: Leaf };
+
+interface DietItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  icon: any;
+}
 
 const DietOptionCard = ({ item, isSelected, toggleSelection }: any) => {
   const rotation = useSharedValue(0);
@@ -76,7 +87,26 @@ const DietOptionCard = ({ item, isSelected, toggleSelection }: any) => {
 export default function DietPreferencesScreen() {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
+  const [availableDiets, setAvailableDiets] = useState<DietItem[]>([]);
   const insets = useSafeAreaInsets();
+
+  React.useEffect(() => {
+    const fetchDiets = async () => {
+      try {
+        const tags = await PersonalizationService.getHealthTags();
+        const dietTags = tags.filter(t => t.tagType === 'diet');
+        const processed = dietTags.map(tag => ({
+          id: tag.healthTagId.toString(),
+          title: tag.tagName,
+          ...(DIET_UI_MAP[tag.healthTagId] || DEFAULT_DIET_UI)
+        }));
+        setAvailableDiets(processed);
+      } catch (e) {
+        console.warn('Lỗi fetch diets:', e);
+      }
+    };
+    fetchDiets();
+  }, []);
 
   const toggleSelection = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -137,7 +167,7 @@ export default function DietPreferencesScreen() {
         {/* Grid Options */}
         <Animated.View entering={FadeInUp.delay(300).springify()}>
           <View style={styles.gridContainer}>
-            {DIET_OPTIONS.map((item) => (
+            {availableDiets.map((item) => (
               <DietOptionCard
                 key={item.id}
                 item={item}

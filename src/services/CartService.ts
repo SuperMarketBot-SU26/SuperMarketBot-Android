@@ -49,6 +49,7 @@ export class CartService {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
         Authorization: `Bearer ${token}`
       },
     });
@@ -56,7 +57,7 @@ export class CartService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[CartService.getCart] Error body (${response.status}):`, rawText);
-      throw new Error(data.message || data.detail || `Lấy giỏ hàng thất bại (${response.status})`);
+      throw new Error(data.error || data.message || data.detail || `Lấy giỏ hàng thất bại (${response.status})`);
     }
 
     return response.json();
@@ -69,6 +70,7 @@ export class CartService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({ productId, quantity }),
@@ -77,7 +79,7 @@ export class CartService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[CartService.addItem] Error body (${response.status}):`, rawText);
-      throw new Error(data.message || data.detail || `Thêm sản phẩm thất bại (${response.status})`);
+      throw new Error(data.error || data.message || data.detail || `Thêm sản phẩm thất bại (${response.status})`);
     }
 
     return response.json();
@@ -90,6 +92,7 @@ export class CartService {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({ quantity }),
@@ -98,7 +101,7 @@ export class CartService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[CartService.updateItemQuantity] Error body (${response.status}):`, rawText);
-      throw new Error(data.message || data.detail || `Cập nhật số lượng thất bại (${response.status})`);
+      throw new Error(data.error || data.message || data.detail || `Cập nhật số lượng thất bại (${response.status})`);
     }
 
     return response.json();
@@ -110,6 +113,7 @@ export class CartService {
     const response = await fetch(`${BASE_URL}/api/cart/items/${productId}`, {
       method: 'DELETE',
       headers: {
+        'ngrok-skip-browser-warning': 'true',
         Authorization: `Bearer ${token}`
       },
     });
@@ -117,7 +121,7 @@ export class CartService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[CartService.removeItem] Error body (${response.status}):`, rawText);
-      throw new Error(data.message || data.detail || `Xóa sản phẩm thất bại (${response.status})`);
+      throw new Error(data.error || data.message || data.detail || `Xóa sản phẩm thất bại (${response.status})`);
     }
 
     return response.json();
@@ -129,6 +133,7 @@ export class CartService {
     const response = await fetch(`${BASE_URL}/api/cart`, {
       method: 'DELETE',
       headers: {
+        'ngrok-skip-browser-warning': 'true',
         Authorization: `Bearer ${token}`
       },
     });
@@ -136,7 +141,7 @@ export class CartService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[CartService.clearCart] Error body (${response.status}):`, rawText);
-      throw new Error(data.message || data.detail || `Xóa giỏ hàng thất bại (${response.status})`);
+      throw new Error(data.error || data.message || data.detail || `Xóa giỏ hàng thất bại (${response.status})`);
     }
 
     return true;
@@ -149,6 +154,7 @@ export class CartService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
         Authorization: `Bearer ${token}`
       },
     });
@@ -156,7 +162,7 @@ export class CartService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[CartService.checkout] Error body (${response.status}):`, rawText);
-      throw new Error(data.message || data.detail || `Thanh toán giỏ hàng thất bại (${response.status})`);
+      throw new Error(data.error || data.message || data.detail || `Thanh toán giỏ hàng thất bại (${response.status})`);
     }
 
     return response.json();

@@ -5,8 +5,11 @@ import { PanResponder, Platform, ScrollView, StyleSheet, Text, TextInput, Toucha
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import { PersonalizationService } from '../../services/PersonalizationService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function BudgetScreen() {
+  const { completeOnboarding } = useAuth();
   const router = useRouter();
   const [amount, setAmount] = useState('2500000');
   const insets = useSafeAreaInsets();
@@ -54,7 +57,8 @@ export default function BudgetScreen() {
   const handleComplete = async () => {
     try {
       await SecureStore.setItemAsync('userBudget', amount);
-      await SecureStore.setItemAsync('onboardingCompleted', 'true');
+      await PersonalizationService.updateBudget(Number(amount));
+      completeOnboarding();
     } catch (e) {
       console.warn('Error saving budget preferences:', e);
     }

@@ -25,22 +25,18 @@ export interface SearchResponseDto {
 }
 
 export class SearchService {
-  static async search(params: {
+  static async searchAll(params: {
     q: string;
-    memberId?: string | number | null;
     limit?: number;
     sortBy?: string;
     useAi?: boolean;
   }): Promise<SearchResponseDto> {
     const token = await SecureStore.getItemAsync('userToken');
-    const { q, memberId, limit = 20, sortBy = 'relevance', useAi = false } = params;
+    const { q, limit = 20, sortBy = 'relevance', useAi = false } = params;
 
-    let url = `${BASE_URL}/api/search?q=${encodeURIComponent(q)}&limit=${limit}&sortBy=${sortBy}&useAi=${useAi}`;
-    if (memberId !== undefined && memberId !== null) {
-      url += `&memberId=${memberId}`;
-    }
+    let url = `${BASE_URL}/api/search/all?q=${encodeURIComponent(q)}&limit=${limit}&sortBy=${sortBy}&useAi=${useAi}`;
 
-    console.log(`[SearchService.search] GET ${url}`);
+    console.log(`[SearchService.searchAll] GET ${url}`);
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -50,19 +46,53 @@ export class SearchService {
       },
     });
 
-    console.log(`[SearchService.search] HTTP Status: ${response.status}`);
+    console.log(`[SearchService.searchAll] HTTP Status: ${response.status}`);
     const rawText = await response.text();
-    console.log(`[SearchService.search] Raw response (first 500 chars): ${rawText.substring(0, 500)}`);
 
     if (!response.ok) {
-      console.error(`[SearchService.search] Error body (${response.status}):`, rawText);
-      throw new Error(`Tìm kiếm thất bại (${response.status})`);
+      console.error(`[SearchService.searchAll] Error body (${response.status}):`, rawText);
+      throw new Error(`Tìm kiếm tất cả thất bại (${response.status})`);
     }
 
     try {
       return JSON.parse(rawText) as SearchResponseDto;
     } catch (e) {
-      console.error(`[SearchService.search] JSON parse error. Raw:`, rawText.substring(0, 300));
+      throw new Error('Phản hồi từ server không hợp lệ');
+    }
+  }
+
+  static async searchPersonalized(params: {
+    q: string;
+    limit?: number;
+    sortBy?: string;
+    useAi?: boolean;
+  }): Promise<SearchResponseDto> {
+    const token = await SecureStore.getItemAsync('userToken');
+    const { q, limit = 20, sortBy = 'relevance', useAi = false } = params;
+
+    let url = `${BASE_URL}/api/search/personalized?q=${encodeURIComponent(q)}&limit=${limit}&sortBy=${sortBy}&useAi=${useAi}`;
+
+    console.log(`[SearchService.searchPersonalized] GET ${url}`);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    console.log(`[SearchService.searchPersonalized] HTTP Status: ${response.status}`);
+    const rawText = await response.text();
+
+    if (!response.ok) {
+      console.error(`[SearchService.searchPersonalized] Error body (${response.status}):`, rawText);
+      throw new Error(`Tìm kiếm cá nhân hóa thất bại (${response.status})`);
+    }
+
+    try {
+      return JSON.parse(rawText) as SearchResponseDto;
+    } catch (e) {
       throw new Error('Phản hồi từ server không hợp lệ');
     }
   }

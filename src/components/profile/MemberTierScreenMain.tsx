@@ -6,6 +6,7 @@ import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View, 
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProfileService, ProfileDto } from '../../services/ProfileService';
+import { useAuth } from '../../context/AuthContext';
 
 const getTierTheme = (tier: string) => {
   const t = tier ? tier.toLowerCase() : '';
@@ -193,27 +194,20 @@ export default function MemberTierScreenMain() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [profile, setProfile] = useState<ProfileDto | null>(null);
+  const { profile, refreshProfile } = useAuth();
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      const fetchProfile = async () => {
-        try {
-          const data = await ProfileService.getProfile();
-          if (isMounted) {
-            setProfile(data);
-          }
-        } catch (error) {
-          console.error('Failed to load profile in MemberTierScreen', error);
-        } finally {
-          if (isMounted) {
-            setIsLoadingProfile(false);
-          }
+      const loadProfile = async () => {
+        setIsLoadingProfile(true);
+        await refreshProfile();
+        if (isMounted) {
+          setIsLoadingProfile(false);
         }
       };
-      fetchProfile();
+      loadProfile();
       return () => {
         isMounted = false;
       };

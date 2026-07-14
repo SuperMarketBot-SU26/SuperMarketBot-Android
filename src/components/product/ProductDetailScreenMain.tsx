@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Award, Clock, Heart, Minus, Plus, ShieldCheck, ShoppingBag, Star } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, {
   FadeInDown,
@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProductService, ProductDto } from '../../services/ProductService';
+import { CartService } from '../../services/CartService';
 
 const { width } = Dimensions.get('window');
 
@@ -232,9 +233,18 @@ export default function ProductDetailScreenMain() {
           </TouchableOpacity>
         </View>
 
-        {/* ===== CSS Transitions: nút Thêm vào giỏ =====
-             Đặt transform + transitionProperty CÙNG trên Animated.View */}
-        <Animated.View
+        <TouchableOpacity
+          onPress={async () => {
+            try {
+              if (product) {
+                await CartService.addItem(product.productId, quantity);
+                ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
+              }
+            } catch (e: any) {
+              ToastAndroid.show(e.message, ToastAndroid.LONG);
+            }
+          }}
+          activeOpacity={0.8}
           style={{
             flex: 1,
             borderRadius: 16,
@@ -245,19 +255,11 @@ export default function ProductDetailScreenMain() {
             paddingVertical: 16,
             paddingHorizontal: 24,
             backgroundColor: '#059669',
-            // CSS Transition — animate khi pressed thay đổi
-            transitionProperty: 'transform' as any,
-            transitionDuration: '120ms' as any,
-            transitionTimingFunction: 'ease-out' as any,
           }}
         >
-          <Pressable
-            onPress={() => router.push('/cart')}
-            style={StyleSheet.absoluteFillObject}
-          />
           <ShoppingBag color="white" size={20} />
           <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
-        </Animated.View>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -383,6 +385,9 @@ const styles = StyleSheet.create({
   guaranteeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     backgroundColor: '#F0FDF4',
     padding: 12,
     borderRadius: 12,
