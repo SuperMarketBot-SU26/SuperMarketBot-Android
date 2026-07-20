@@ -152,6 +152,7 @@ export default function HomeScreenMain() {
   const [robotBattery, setRobotBattery] = useState<number | null>(null);
   const [robotStatus, setRobotStatus] = useState<string | null>(null);
   const [sponsoredAds, setSponsoredAds] = useState<SponsoredRecommendationDto[]>([]);
+  const [systemDeals, setSystemDeals] = useState<any[]>([]);
   const [loadingAds, setLoadingAds] = useState(true);
 
   const [isListening, setIsListening] = useState(false);
@@ -272,7 +273,7 @@ export default function HomeScreenMain() {
     try {
       setAddingToCart(true);
       // Add all available items in parallel
-      await Promise.all(inStockItems.map(item => CartService.addItem(item.productId, item.quantityRequired)));
+      await Promise.all(inStockItems.map(item => CartService.addItem(item.productId, Math.ceil(item.quantityRequired))));
       
       setRecipeModalVisible(false);
       
@@ -348,12 +349,17 @@ export default function HomeScreenMain() {
     try {
       setLoadingAds(true);
       if (profile?.memberId) {
-        // Lấy quảng cáo được tài trợ, có truyền memberId để check dị ứng
         const ads = await MemberAdService.getSponsoredRecommendations(profile.memberId as number);
         setSponsoredAds(ads);
+        
+        const deals = await ProductService.getDeals(profile.memberId as number);
+        setSystemDeals(deals);
+      } else {
+        const deals = await ProductService.getDeals();
+        setSystemDeals(deals);
       }
     } catch (e) {
-      console.warn('Failed to fetch sponsored ads:', e);
+      console.warn('Failed to fetch sponsored ads or deals:', e);
     } finally {
       setLoadingAds(false);
     }
@@ -647,6 +653,45 @@ export default function HomeScreenMain() {
                       <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }} numberOfLines={1}>
                         Chứa: {ad.allergyDetails}
                       </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
+
+        {/* System Deals */}
+        {systemDeals.length > 0 && (
+          <Animated.View entering={FadeInRight.delay(580)}>
+            <View style={[styles.sectionHeader, { marginTop: 16 }]}>
+              <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>Khuyến mãi hệ thống & cá nhân</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {systemDeals.map((deal, idx) => (
+                <TouchableOpacity
+                  key={`deal-${deal.productId}-${idx}`}
+                  style={[styles.smartCard, { width: width * 0.45 }]}
+                  activeOpacity={0.9}
+                  onPress={() => router.push({ pathname: '/product', params: { id: deal.productId } })}
+                >
+                  <View style={styles.smartCardImageWrapper}>
+                    <Image source={{ uri: deal.imageUrl || 'https://via.placeholder.com/400x400.png?text=No+Image' }} style={styles.smartCardImage} />
+                    {deal.discountPercent ? (
+                      <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: '#eab308', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>-{deal.discountPercent}%</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={[styles.smartCardFooter, { padding: 12 }]}>
+                    <Text style={[styles.smartCardTitle, { color: '#111827', fontSize: 14 }]} numberOfLines={2}>{deal.productName}</Text>
+                    {deal.promotionPrice ? (
+                      <View style={{ marginTop: 4 }}>
+                        <Text style={{ fontSize: 11, color: '#6B7280', textDecorationLine: 'line-through' }}>{deal.unitPrice.toLocaleString('vi-VN')} đ</Text>
+                        <Text style={{ fontSize: 15, color: '#059669', fontWeight: 'bold' }}>{deal.promotionPrice.toLocaleString('vi-VN')} đ</Text>
+                      </View>
+                    ) : (
+                      <Text style={[styles.productPrice, { marginTop: 4, fontSize: 15 }]}>{deal.unitPrice.toLocaleString('vi-VN')} đ</Text>
                     )}
                   </View>
                 </TouchableOpacity>

@@ -63,4 +63,33 @@ export class ProductService {
     console.log(`[ProductService.getProductDetail] imageUrl:`, json.imageUrl);
     return json as ProductDto;
   }
+
+  static async getDeals(memberId?: number, minDiscountPercent?: number): Promise<any[]> {
+    console.log(`[ProductService.getDeals] GET ${BASE_URL}/api/v1/products/deals`);
+    const url = new URL(`${BASE_URL}/api/v1/products/deals`);
+    if (memberId) url.searchParams.append('memberId', memberId.toString());
+    if (minDiscountPercent) url.searchParams.append('minDiscountPercent', minDiscountPercent.toString());
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+    });
+
+    if (!response.ok) {
+      const { rawText, data } = await parseErrorBody(response);
+      console.error(`[ProductService.getDeals] Error body (${response.status}):`, rawText);
+      throw new Error(data.message || data.detail || `Lấy danh sách khuyến mãi thất bại (${response.status})`);
+    }
+
+    const json = await response.json();
+    const items = json.items || json || [];
+    return items.map((item: any) => ({
+      ...item,
+      unitPrice: item.unitPrice || item.originalPrice || 0,
+      promotionPrice: item.promotionPrice || item.dealPrice,
+    }));
+  }
 }
