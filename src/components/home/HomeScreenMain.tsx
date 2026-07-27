@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Animated as RNAnimated, Modal, Alert } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Animated as RNAnimated, Modal, Alert, Platform, PermissionsAndroid } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, FadeInRight, FadeInUp, SharedTransition, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -159,36 +159,54 @@ export default function HomeScreenMain() {
   const [voiceText, setVoiceText] = useState('');
   const pulseAnim = React.useRef(new RNAnimated.Value(1)).current;
 
+  const isMounted = React.useRef(true);
+
   useEffect(() => {
+    isMounted.current = true;
     try {
-      Voice.onSpeechStart = () => setIsListening(true);
-      Voice.onSpeechEnd = () => setIsListening(false);
+      Voice.onSpeechStart = () => { if (isMounted.current) setIsListening(true); };
+      Voice.onSpeechEnd = () => { if (isMounted.current) setIsListening(false); };
       Voice.onSpeechPartialResults = (e) => {
-        if (e.value && e.value.length > 0) {
+        if (isMounted.current && e.value && e.value.length > 0) {
           setVoiceText(e.value[0]);
         }
       };
       Voice.onSpeechResults = (e) => {
-        if (e.value && e.value.length > 0) {
+        if (isMounted.current && e.value && e.value.length > 0) {
           const resultText = e.value[0];
+          if (/[\u4e00-\u9fa5]/.test(resultText)) {
+            console.warn('Chinese noise ignored');
+            return;
+          }
           setVoiceText(resultText);
           setTimeout(() => {
-            setIsListening(false);
-            const cleanedQuery = cleanSearchQuery(resultText);
-            router.push({ pathname: '/search', params: { query: cleanedQuery, mode: searchMode } });
+            if (isMounted.current) {
+              setIsListening(false);
+              const cleanedQuery = cleanSearchQuery(resultText);
+              if (cleanedQuery) {
+                router.push({ pathname: '/search', params: { query: cleanedQuery, mode: searchMode } });
+              }
+            }
           }, 1000);
         }
       };
       Voice.onSpeechError = (e) => {
-        setIsListening(false);
-        ToastAndroid.show('Không thể nhận diện giọng nói', ToastAndroid.SHORT);
+        if (isMounted.current) {
+          setIsListening(false);
+          ToastAndroid.show('Không thể nhận diện giọng nói', ToastAndroid.SHORT);
+        }
       };
     } catch(err) {
       console.warn("Voice module not available yet", err);
     }
     return () => {
+      isMounted.current = false;
       try {
-        Voice.destroy().then(Voice.removeAllListeners);
+        Voice.onSpeechStart = () => {};
+        Voice.onSpeechEnd = () => {};
+        Voice.onSpeechResults = () => {};
+        Voice.onSpeechPartialResults = () => {};
+        Voice.onSpeechError = () => {};
       } catch(err) {}
     };
   }, [searchMode]);
@@ -210,6 +228,44 @@ export default function HomeScreenMain() {
     try {
       setVoiceText('');
       setIsListening(true);
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Quyền truy cập Micro',
+            message: 'Ứng dụng cần sử dụng micro để tìm kiếm bằng giọng nói.',
+            buttonNeutral: 'Hỏi lại sau',
+            buttonNegative: 'Từ chối',
+            buttonPositive: 'Cho phép',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          ToastAndroid.show('Quyền micro bị từ chối, chuyển sang giọng nói mô phỏng', ToastAndroid.SHORT);
+          setTimeout(() => setVoiceText('Sữa chua không đường'), 1500);
+          setTimeout(() => {
+            setIsListening(false);
+            router.push({ pathname: '/search', params: { query: 'Sữa chua không đường', mode: searchMode } });
+          }, 3000);
+          return;
+        }
+      }
+      try {
+        await Voice.stop();
+      } catch (err) {}
+
+      const isAvailable = await Voice.isAvailable().catch(() => false);
+      if (!isAvailable) {
+        ToastAndroid.show('Mô phỏng Voice (Thiết bị dùng MI AI không hỗ trợ vi-VN)', ToastAndroid.SHORT);
+        setTimeout(() => setVoiceText('Sữa chua không đường'), 1500);
+        setTimeout(() => {
+          if (isMounted.current) {
+            setIsListening(false);
+            router.push({ pathname: '/search', params: { query: 'Sữa chua không đường', mode: searchMode } });
+          }
+        }, 3000);
+        return;
+      }
+
       await Voice.start('vi-VN');
     } catch (e) {
       console.error(e);

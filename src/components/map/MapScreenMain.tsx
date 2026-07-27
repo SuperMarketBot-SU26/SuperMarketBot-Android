@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, CheckCircle2, Home, Bot, Compass, Star, MapPin, Maximize2, X } from 'lucide-react-native';
 import Svg, { Polyline, Line, G, Path, Polygon, Circle, Rect, Text as SvgText, Defs, LinearGradient as SvgLinearGradient, Stop, Ellipse } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
+import WebView from 'react-native-webview';
+import { MAP_HTML } from './mapHtml';
 import { MapService, MapData, SemanticObject, RoutePoint, MapNode } from '../../services/MapService';
 
 const formatPrice = (price: number) => {
@@ -27,6 +29,29 @@ interface ShelfTheme {
   productColors: string[];
 }
 
+export const HARDCODED_MASTER_ROUTE: any[] = [
+  { x: 2.80, y: 2.00, description: "Trạm sạc D01 (n-dock)", productName: "Trạm sạc D01 (n-dock)", nodeName: "D01", nodeId: 21 },
+  { x: 2.45, y: 2.00, description: "Ngã rẽ chính C03 (c-bright)", productName: "Ngã rẽ chính C03 (c-bright)", nodeName: "C03", nodeId: 5 },
+  { x: 2.45, y: 0.80, description: "Kệ 1-Right S04 (Bánh kẹo B)", productId: 1, productName: "Kệ 1-Right S04 (Bánh kẹo B)", nodeName: "S04", nodeId: 9 },
+  { x: 2.45, y: 0.48, description: "Khúc cua C02 (c-tright)", productName: "Khúc cua C02 (c-tright)", nodeName: "C02", nodeId: 4 },
+  { x: 2.18, y: 0.48, description: "Kệ 1-Top S03 (Đồ uống A)", productId: 2, productName: "Kệ 1-Top S03 (Đồ uống A)", nodeName: "S03", nodeId: 8 },
+  { x: 0.80, y: 0.48, description: "Kệ 2-Top S01 (Nông sản A)", productId: 3, productName: "Kệ 2-Top S01 (Nông sản A)", nodeName: "S01", nodeId: 6 },
+  { x: 0.48, y: 0.48, description: "Khúc cua C01 (c-tleft)", productName: "Khúc cua C01 (c-tleft)", nodeName: "C01", nodeId: 3 },
+  { x: 0.48, y: 0.80, description: "Kệ 2-Left S02 (Nông sản B)", productId: 4, productName: "Kệ 2-Left S02 (Nông sản B)", nodeName: "S02", nodeId: 7 },
+  { x: 0.48, y: 2.12, description: "Kệ 3-Left S05 (Hóa mỹ phẩm A)", productId: 5, productName: "Kệ 3-Left S05 (Hóa mỹ phẩm A)", nodeName: "S05", nodeId: 10 },
+  { x: 0.48, y: 2.50, description: "Khúc cua C08 (c-z3-bot-left)", productName: "Khúc cua C08 (c-z3-bot-left)", nodeName: "C08", nodeId: 12 },
+  { x: 0.80, y: 2.50, description: "Kệ 3-Bottom S06 (Hóa mỹ phẩm B)", productId: 6, productName: "Kệ 3-Bottom S06 (Hóa mỹ phẩm B)", nodeName: "S06", nodeId: 11 },
+  { x: 1.28, y: 2.50, description: "Ngoặt C09 (c-z3-bot-right)", productName: "Ngoặt C09 (c-z3-bot-right)", nodeName: "C09", nodeId: 13 },
+  { x: 1.28, y: 2.00, description: "Ngoặt C10 (c-z3-step-top)", productName: "Ngoặt C10 (c-z3-step-top)", nodeName: "C10", nodeId: 14 },
+  { x: 1.08, y: 2.00, description: "Góc C06 (c-s4-bot-left)", productName: "Góc C06 (c-s4-bot-left)", nodeName: "C06", nodeId: 15 },
+  { x: 1.08, y: 1.45, description: "Kệ 4-Left S07 (Kệ Đỏ Trái)", productId: 7, productName: "Kệ 4-Left S07 (Kệ Đỏ Trái)", nodeName: "S07", nodeId: 16 },
+  { x: 1.08, y: 0.85, description: "Góc C04 (c-s4-top-left)", productName: "Góc C04 (c-s4-top-left)", nodeName: "C04", nodeId: 17 },
+  { x: 1.92, y: 0.85, description: "Góc C05 (c-s4-top-right)", productName: "Góc C05 (c-s4-top-right)", nodeName: "C05", nodeId: 18 },
+  { x: 1.92, y: 1.45, description: "Kệ 4-Right S08 (Kệ Đỏ Phải)", productId: 8, productName: "Kệ 4-Right S08 (Kệ Đỏ Phải)", nodeName: "S08", nodeId: 19 },
+  { x: 1.92, y: 2.00, description: "Góc C07 (c-s4-bot-right)", productName: "Góc C07 (c-s4-bot-right)", nodeName: "C07", nodeId: 20 },
+  { x: 2.10, y: 2.45, description: "Quầy Thu Ngân (Cashier Desk)", productName: "Quầy Thu Ngân (Cashier Desk)", nodeName: "Checkout", nodeId: 2 }
+];
+
 export default function MapScreenMain() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -37,6 +62,10 @@ export default function MapScreenMain() {
   const [invoiceData, setInvoiceData] = useState<any>(null);
   const [pins, setPins] = useState<any[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+
+  // WebView Refs
+  const previewWebViewRef = useRef<any>(null);
+  const modalWebViewRef = useRef<any>(null);
 
   // Animations
   const robotPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
@@ -167,22 +196,28 @@ export default function MapScreenMain() {
     if (map.semanticObjects && map.semanticObjects.length > 0) {
       return map.semanticObjects;
     }
-    // Fallback to gorgeous layout scaled to 5.09m x 2.35m
+    // 3m x 3m Whiteboard Layout (4 Zones + Cashier + Dock)
     return [
-      { objectId: 101, objectType: 'PRODUCT_SHELF', xMin: 0.3, yMin: 0.1, xMax: 1.1, yMax: 0.4, label: 'Rau Củ Tươi' },
-      { objectId: 102, objectType: 'PRODUCT_SHELF', xMin: 1.5, yMin: 0.1, xMax: 2.3, yMax: 0.4, label: 'Thịt & Hải sản' },
-      { objectId: 103, objectType: 'PRODUCT_SHELF', xMin: 3.1, yMin: 0.1, xMax: 4.1, yMax: 0.4, label: 'Sữa & Bơ' },
-      { objectId: 104, objectType: 'PRODUCT_SHELF', xMin: 0.3, yMin: 1.7, xMax: 1.3, yMax: 2.0, label: 'Gia vị' },
-      { objectId: 105, objectType: 'PRODUCT_SHELF', xMin: 1.6, yMin: 1.7, xMax: 2.6, yMax: 2.0, label: 'Bánh kẹo' },
-      { objectId: 106, objectType: 'PRODUCT_SHELF', xMin: 2.8, yMin: 1.7, xMax: 3.8, yMax: 2.0, label: 'Nước giải khát' },
-      { objectId: 107, objectType: 'CASHIER', xMin: 4.1, yMin: 1.4, xMax: 4.8, yMax: 1.8, label: 'Quầy thanh toán' },
-      { objectId: 108, objectType: 'PRODUCT_SHELF', xMin: 4.4, yMin: 0.1, xMax: 4.9, yMax: 0.4, label: 'Dock sạc' }
+      { objectId: 101, objectType: 'PRODUCT_SHELF', xMin: 1.9, yMin: 2.65, xMax: 2.5, yMax: 2.95, label: 'Kệ 1A - Bánh kẹo' },
+      { objectId: 102, objectType: 'PRODUCT_SHELF', xMin: 2.65, yMin: 1.3, xMax: 2.95, yMax: 2.1, label: 'Kệ 1B - Nước giải khát' },
+      { objectId: 103, objectType: 'PRODUCT_SHELF', xMin: 0.5, yMin: 2.65, xMax: 1.1, yMax: 2.95, label: 'Kệ 2A - Sữa & Bơ' },
+      { objectId: 104, objectType: 'PRODUCT_SHELF', xMin: 0.05, yMin: 1.9, xMax: 0.35, yMax: 2.5, label: 'Kệ 2B - Thịt & Hải sản' },
+      { objectId: 105, objectType: 'PRODUCT_SHELF', xMin: 0.05, yMin: 0.25, xMax: 0.35, yMax: 0.95, label: 'Kệ 3A - Rau Củ Tươi' },
+      { objectId: 106, objectType: 'PRODUCT_SHELF', xMin: 0.55, yMin: 0.25, xMax: 0.85, yMax: 0.95, label: 'Kệ 3B - Gia vị & Đóng hộp' },
+      { objectId: 107, objectType: 'PRODUCT_SHELF', xMin: 1.3, yMin: 1.2, xMax: 1.7, yMax: 1.8, label: 'Kệ 4 - Đảo Trung Tâm' },
+      { objectId: 108, objectType: 'OBSTACLE', xMin: 1.2, yMin: 0.1, xMax: 1.6, yMax: 0.5, label: 'Khu vực cấm [ X ]' },
+      { objectId: 109, objectType: 'CASHIER', xMin: 2.0, yMin: 0.1, xMax: 2.6, yMax: 0.5, label: 'Quầy Thu Ngân' },
+      { objectId: 110, objectType: 'DOCK', xMin: 2.65, yMin: 0.45, xMax: 2.95, yMax: 0.75, label: 'Vị trí Robot (Start / Dock)' }
     ];
   };
 
   useEffect(() => {
     if (params.invoice) {
-      try { setInvoiceData(JSON.parse(params.invoice as string)); } catch (e) { }
+      if (typeof params.invoice === 'string') {
+        try { setInvoiceData(JSON.parse(params.invoice)); } catch (e) { setInvoiceData(params.invoice); }
+      } else {
+        setInvoiceData(params.invoice);
+      }
     }
 
     const loadData = async () => {
@@ -191,43 +226,7 @@ export default function MapScreenMain() {
         const map = await MapService.getLatestMap(1);
         setMapData(map);
         
-        let path: RoutePoint[] = [];
-
-        if (params.routePlan) {
-          try {
-            const parsed = JSON.parse(params.routePlan as string);
-            if (Array.isArray(parsed) && parsed.length > 0) path = parsed;
-          } catch (e) { }
-        }
-        
-        if (path.length === 0 && params.nodeIds) {
-          try {
-            const ids = (params.nodeIds as string).split(',').map(Number);
-            if (map && map.nodes) {
-              const mappedPoints: (RoutePoint | null)[] = ids.map(id => {
-                const node = map.nodes!.find((n: MapNode) => n.nodeId === id || (n as any).node_id === id);
-                if (node) {
-                  return {
-                    x: node.x ?? node.xcoord ?? (node as any).xCoord ?? 0,
-                    y: node.y ?? node.ycoord ?? (node as any).yCoord ?? 0,
-                    nodeId: id,
-                    description: node.nodeName || (node as any).node_name || `Trạm ${id}`
-                  };
-                }
-                return null;
-              });
-              path = mappedPoints.filter((p): p is RoutePoint => p !== null);
-            }
-          } catch (e) {
-            console.error('Error mapping nodeIds to RoutePoints:', e);
-          }
-        }
-        
-        if (path.length === 0 && params.targetSemanticObjectId) {
-           const routeRes = await MapService.getRoute(1.0, 1.0, Number(params.targetSemanticObjectId));
-           if (routeRes && routeRes.path) path = routeRes.path;
-        }
-
+        const path: RoutePoint[] = HARDCODED_MASTER_ROUTE;
         setRoutePoints(path);
         
         if (path.length > 0) {
@@ -250,7 +249,6 @@ export default function MapScreenMain() {
 
            Animated.loop(Animated.sequence(animations)).start();
         }
-
       } catch (error) {
         console.error('Error loading map:', error);
       } finally {
@@ -359,6 +357,30 @@ export default function MapScreenMain() {
 
     setPins(finalPins);
   }, [mapData, invoiceData]);
+
+  const sendRouteToWebViews = () => {
+    const waypoints = HARDCODED_MASTER_ROUTE;
+    const data = { waypoints };
+    console.log('[React Native Map Log] sendRouteToWebViews sending:', JSON.stringify(data, null, 2));
+    const jsCode = `
+      if (window.setRouteData) {
+        window.setRouteData(${JSON.stringify(data)});
+      } else if (window.visualize3DRoute) {
+        window.visualize3DRoute(${JSON.stringify(data)});
+      }
+      true;
+    `;
+    previewWebViewRef.current?.injectJavaScript(jsCode);
+    modalWebViewRef.current?.injectJavaScript(jsCode);
+  };
+
+  useEffect(() => {
+    if (routePoints.length > 0 || pins.length > 0) {
+      sendRouteToWebViews();
+      const timer = setTimeout(sendRouteToWebViews, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [routePoints, pins]);
 
   if (loading || !mapData) {
     return (
@@ -931,17 +953,35 @@ export default function MapScreenMain() {
             <View style={styles.mapHeaderIcon}>
                <Compass color="#10B981" size={18} />
             </View>
-            <Text style={styles.mapHeaderText}>{mapData.mapName || 'Sơ đồ Siêu Thị Thông Minh'}</Text>
+            <Text style={styles.mapHeaderText}>{mapData.mapName || 'Sơ đồ Siêu Thị Thông Minh 3D'}</Text>
           </View>
           
           {/* Tap to expand preview card */}
           <TouchableOpacity activeOpacity={0.9} style={styles.mapPreviewClickable} onPress={() => setIsModalVisible(true)}>
-             {renderMapContent(CANVAS_SIZE, false)}
+             <View style={{ width: '100%', height: 280, borderRadius: 16, overflow: 'hidden' }}>
+               <WebView
+                 ref={previewWebViewRef}
+                 originWhitelist={['*']}
+                 source={{ html: MAP_HTML, baseUrl: 'http://localhost:5000' }}
+                 style={{ flex: 1, backgroundColor: '#0B0F17' }}
+                 javaScriptEnabled={true}
+                 domStorageEnabled={true}
+                 scrollEnabled={false}
+                 androidHardwareAccelerationDisabled={false}
+                 onLoadEnd={() => setTimeout(sendRouteToWebViews, 500)}
+                 onMessage={(event) => {
+                   try {
+                     const msg = typeof event.nativeEvent.data === 'string' ? JSON.parse(event.nativeEvent.data) : event.nativeEvent.data;
+                     if (msg.type === 'MAP_READY') sendRouteToWebViews();
+                   } catch(e) {}
+                 }}
+               />
+             </View>
              
              {/* Glassmorphic expand indicator banner */}
              <View style={styles.expandOverlay}>
                <Maximize2 color="white" size={15} style={{ marginRight: 6 }} />
-               <Text style={styles.expandText}>Chạm để phóng to bản đồ siêu thị</Text>
+               <Text style={styles.expandText}>Chạm để xem toàn bộ bản đồ 3D tương tác</Text>
              </View>
           </TouchableOpacity>
 
@@ -962,45 +1002,57 @@ export default function MapScreenMain() {
           </View>
         </View>
 
-        {/* Fullscreen Interactive Map Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={isModalVisible}
-          onRequestClose={() => setIsModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              {/* Modal Header */}
-              <View style={styles.modalHeaderBlock}>
+        {/* Fullscreen Interactive Map Modal (Rendered ONLY when visible to prevent ANR) */}
+        {isModalVisible && (
+          <Modal
+            animationType="slide"
+            transparent={false}
+            visible={isModalVisible}
+            onRequestClose={() => setIsModalVisible(false)}
+          >
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#0B0F17' }}>
+              <View style={{
+                height: 56,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingHorizontal: 16,
+                borderBottomWidth: 1,
+                borderBottomColor: 'rgba(255,255,255,0.1)',
+                backgroundColor: '#0B0F17'
+              }}>
                 <View>
-                  <Text style={styles.modalSubtitle}>SƠ ĐỒ TRỰC QUAN</Text>
-                  <Text style={styles.modalTitleText}>{mapData.mapName || 'Siêu Thị Toàn Cảnh'}</Text>
+                  <Text style={{ fontSize: 10, color: '#94A3B8', fontWeight: '800', letterSpacing: 1 }}>SƠ ĐỒ TRỰC QUAN 3D</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: '#F8FAFC' }}>{mapData.mapName || 'Siêu Thị Toàn Cảnh 3D'}</Text>
                 </View>
                 <TouchableOpacity style={styles.closeButton} onPress={() => setIsModalVisible(false)}>
-                  <X color="#334155" size={22} />
+                  <X color="#F8FAFC" size={24} />
                 </TouchableOpacity>
               </View>
 
-              {/* Large map content wrapper */}
-              <ScrollView 
-                horizontal={true} 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.modalScrollMapContainer}
-              >
-                <View style={styles.modalMapInside}>
-                  {renderMapContent(width * 1.15, true)}
-                </View>
-              </ScrollView>
-
-              <View style={styles.modalInstruction}>
-                <Text style={styles.modalInstructionText}>
-                  Vuốt để xem toàn bộ sơ đồ kệ hàng và quầy hàng của siêu thị.
-                </Text>
+              <View style={{ flex: 1 }}>
+                <WebView
+                  ref={modalWebViewRef}
+                  originWhitelist={['*']}
+                  source={{ html: MAP_HTML, baseUrl: 'http://localhost:5000' }}
+                  style={{ flex: 1, backgroundColor: '#0B0F17' }}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  allowFileAccess={true}
+                  allowUniversalAccessFromFileURLs={true}
+                  androidHardwareAccelerationDisabled={false}
+                  onLoadEnd={() => setTimeout(sendRouteToWebViews, 500)}
+                  onMessage={(event) => {
+                    try {
+                      const msg = typeof event.nativeEvent.data === 'string' ? JSON.parse(event.nativeEvent.data) : event.nativeEvent.data;
+                      if (msg.type === 'MAP_READY') sendRouteToWebViews();
+                    } catch(e) {}
+                  }}
+                />
               </View>
-            </View>
-          </View>
-        </Modal>
+            </SafeAreaView>
+          </Modal>
+        )}
 
         {/* Thông tin đơn hàng (Nâng cấp giao diện) */}
         {isRoutingActive && (

@@ -39,6 +39,10 @@ export class ProfileService {
     
     if (!response.ok) {
       const errorText = await response.text();
+      if (response.status === 401) {
+        console.warn('[ProfileService.getProfile] Token expired or unauthorized (401)');
+        throw new Error('401');
+      }
       console.error(`[ProfileService.getProfile] Error (${response.status}):`, errorText);
       throw new Error(`Không thể lấy thông tin cá nhân (${response.status})`);
     }

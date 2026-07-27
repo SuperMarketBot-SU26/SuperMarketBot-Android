@@ -47,6 +47,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
           .withUrl(`${BASE_URL}/hubs/member`, {
             accessTokenFactory: () => Promise.resolve(token),
           })
+          .configureLogging(signalR.LogLevel.None)
           .withAutomaticReconnect()
           .build();
 

@@ -119,7 +119,7 @@ export default function FaceLoginScreenMain() {
     try {
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
-        quality: 0.7,
+        quality: 0.35,
         shutterSound: false,
       });
       if (!photo?.base64) throw new Error('Không thể chụp ảnh');

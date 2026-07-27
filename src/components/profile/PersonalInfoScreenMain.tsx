@@ -55,7 +55,7 @@ export default function PersonalInfoScreenMain() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.5,
+      quality: 0.35,
       base64: true,
     });
 

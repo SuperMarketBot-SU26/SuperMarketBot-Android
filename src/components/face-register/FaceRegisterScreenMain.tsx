@@ -106,7 +106,7 @@ export default function FaceRegisterScreenMain() {
     setStatus('processing');
     try {
       if (!token) throw new Error('Phiên đăng nhập hết hạn. Vui lòng thử lại.');
-      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7, shutterSound: false });
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.35, shutterSound: false });
       if (!photo?.base64) throw new Error('Không thể chụp ảnh');
 
       await AuthService.registerFace(photo.base64, token);
