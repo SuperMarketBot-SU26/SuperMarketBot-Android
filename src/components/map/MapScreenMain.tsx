@@ -52,6 +52,8 @@ export const HARDCODED_MASTER_ROUTE: any[] = [
   { x: 2.10, y: 2.45, description: "Quầy Thu Ngân (Cashier Desk)", productName: "Quầy Thu Ngân (Cashier Desk)", nodeName: "Checkout", nodeId: 2 }
 ];
 
+import VisualNavigationStepper, { NavigationStep } from './VisualNavigationStepper';
+
 export default function MapScreenMain() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -62,6 +64,32 @@ export default function MapScreenMain() {
   const [invoiceData, setInvoiceData] = useState<any>(null);
   const [pins, setPins] = useState<any[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isVisualNavVisible, setIsVisualNavVisible] = useState(false);
+
+  // Mock data for Visual Navigation
+  const dummySteps: NavigationStep[] = [
+    {
+      id: '1',
+      instruction: 'Đi thẳng 5 mét qua quầy Nông Sản',
+      direction: 'straight',
+      imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1000',
+      nodeName: 'Kệ Rau Củ',
+    },
+    {
+      id: '2',
+      instruction: 'Rẽ trái tại ngã rẽ khu Đồ Uống',
+      direction: 'left',
+      imageUrl: 'https://images.unsplash.com/photo-1601599561096-f87c95fff1e9?auto=format&fit=crop&q=80&w=1000',
+      nodeName: 'Ngã rẽ C03',
+    },
+    {
+      id: '3',
+      instruction: 'Bạn đã tới khu vực Bánh Kẹo',
+      direction: 'arrive',
+      imageUrl: 'https://images.unsplash.com/photo-1621939514649-280e2ee25f60?auto=format&fit=crop&q=80&w=1000',
+      nodeName: 'Kệ Bánh Kẹo S04',
+    }
+  ];
 
   // WebView Refs
   const previewWebViewRef = useRef<any>(null);
@@ -1096,11 +1124,40 @@ export default function MapScreenMain() {
           </View>
         )}
 
+        {/* Start Visual Navigation Button */}
+        {isRoutingActive && (
+          <TouchableOpacity 
+            style={[styles.btnHome, { backgroundColor: '#10B981', marginBottom: 12 }]} 
+            onPress={() => setIsVisualNavVisible(true)}
+          >
+            <Compass color="white" size={20} style={{ marginRight: 8 }} />
+            <Text style={styles.btnHomeText}>Bắt đầu Dẫn đường Hình ảnh (AR)</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={styles.btnHome} onPress={() => router.replace('/home')}>
           <Home color="white" size={20} style={{ marginRight: 8 }} />
           <Text style={styles.btnHomeText}>Hoàn thành & Về trang chủ</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Visual Navigation Modal */}
+      {isVisualNavVisible && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={isVisualNavVisible}
+          onRequestClose={() => setIsVisualNavVisible(false)}
+        >
+          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <VisualNavigationStepper
+              steps={dummySteps}
+              onClose={() => setIsVisualNavVisible(false)}
+              onFinish={() => setIsVisualNavVisible(false)}
+            />
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
