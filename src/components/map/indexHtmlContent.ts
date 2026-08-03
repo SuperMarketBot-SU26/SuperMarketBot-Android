@@ -573,6 +573,9 @@ export const HTML_SOURCE = `<!DOCTYPE html>
         if (message.type === 'SET_ROUTE' && message.routeData) {
           window.setRouteData(message.routeData);
         }
+        if (message.type === 'JUMP_ROBOT' && message.x !== undefined && message.y !== undefined) {
+          window.jumpRobotToNode(message.x, message.y);
+        }
       } catch(e) {}
     });
 
@@ -582,8 +585,134 @@ export const HTML_SOURCE = `<!DOCTYPE html>
         if (message.type === 'SET_ROUTE' && message.routeData) {
           window.setRouteData(message.routeData);
         }
+        if (message.type === 'JUMP_ROBOT' && message.x !== undefined && message.y !== undefined) {
+          window.jumpRobotToNode(message.x, message.y);
+        }
       } catch(e) {}
     });
+
+    // ─────────── CLICKABLE NODE SPHERES (Robot Dispatch) ───────────
+    // Waypoints matching HARDCODED_MASTER_ROUTE in MapScreenMain.tsx
+    var DISPATCH_NODES = [
+      { nodeId: 21, nodeName: 'Trạm sạc D01', x: 2.80, y: 2.00 },
+      { nodeId: 5,  nodeName: 'Ngã rẽ C03',   x: 2.45, y: 2.00 },
+      { nodeId: 9,  nodeName: 'Kệ 1 (Bánh kẹo)', x: 2.45, y: 0.80 },
+      { nodeId: 4,  nodeName: 'Khúc cua C02',  x: 2.45, y: 0.48 },
+      { nodeId: 8,  nodeName: 'Kệ 1 (Đồ uống)', x: 2.18, y: 0.48 },
+      { nodeId: 6,  nodeName: 'Kệ 2 (Nông sản A)', x: 0.80, y: 0.48 },
+      { nodeId: 3,  nodeName: 'Khúc cua C01',  x: 0.48, y: 0.48 },
+      { nodeId: 7,  nodeName: 'Kệ 2 (Nông sản B)', x: 0.48, y: 0.80 },
+      { nodeId: 10, nodeName: 'Kệ 3 (Hóa mỹ phẩm A)', x: 0.48, y: 2.12 },
+      { nodeId: 12, nodeName: 'Khúc cua C08',  x: 0.48, y: 2.50 },
+      { nodeId: 11, nodeName: 'Kệ 3 (Hóa mỹ phẩm B)', x: 0.80, y: 2.50 },
+      { nodeId: 13, nodeName: 'Ngoặt C09',     x: 1.28, y: 2.50 },
+      { nodeId: 14, nodeName: 'Ngoặt C10',     x: 1.28, y: 2.00 },
+      { nodeId: 15, nodeName: 'Góc C06',       x: 1.08, y: 2.00 },
+      { nodeId: 16, nodeName: 'Kệ 4 (Trái)',   x: 1.08, y: 1.45 },
+      { nodeId: 17, nodeName: 'Góc C04',       x: 1.08, y: 0.85 },
+      { nodeId: 18, nodeName: 'Góc C05',       x: 1.92, y: 0.85 },
+      { nodeId: 19, nodeName: 'Kệ 4 (Phải)',   x: 1.92, y: 1.45 },
+      { nodeId: 20, nodeName: 'Góc C07',       x: 1.92, y: 2.00 },
+      { nodeId: 2,  nodeName: 'Quầy Thu Ngân', x: 2.10, y: 2.45 }
+    ];
+
+    var nodeClickMeshes = [];
+    var nodeMeta = [];
+
+    DISPATCH_NODES.forEach(function(node) {
+      // Invisible large sphere for easy touch targeting
+      var geo = new THREE.SphereGeometry(0.12, 12, 12);
+      var mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.0 });
+      var mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(node.x, 0.15, node.y);
+      mesh.userData = { nodeId: node.nodeId, nodeName: node.nodeName, wx: node.x, wy: node.y };
+      scene.add(mesh);
+      nodeClickMeshes.push(mesh);
+
+      // Visible pulse ring on floor
+      var ringGeo = new THREE.RingGeometry(0.06, 0.09, 24);
+      var ringMat = new THREE.MeshBasicMaterial({
+        color: 0x06B6D4,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.7
+      });
+      var ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(node.x, 0.005, node.y);
+      scene.add(ring);
+    });
+
+    // Raycaster for touch/click picking
+    var raycaster = new THREE.Raycaster();
+    var mouse = new THREE.Vector2();
+    var lastTapTime = 0;
+
+    function onNodeTap(event) {
+      var now = Date.now();
+      if (now - lastTapTime < 300) return; // debounce
+      lastTapTime = now;
+
+      var rect = renderer.domElement.getBoundingClientRect();
+      var clientX, clientY;
+      if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+      } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+      }
+
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      var intersects = raycaster.intersectObjects(nodeClickMeshes);
+
+      if (intersects.length > 0) {
+        var hit = intersects[0].object;
+        var userData = hit.userData;
+        try {
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'NODE_CLICKED',
+              nodeId: userData.nodeId,
+              nodeName: userData.nodeName,
+              x: userData.wx,
+              y: userData.wy
+            }));
+          }
+        } catch(e) {}
+      }
+    }
+
+    renderer.domElement.addEventListener('touchstart', onNodeTap, { passive: true });
+    renderer.domElement.addEventListener('click', onNodeTap);
+
+    // ─────────── JUMP ROBOT TO NODE (called after REACHED) ───────────
+    window.jumpRobotToNode = function(wx, wy) {
+      if (!robotGroup) return;
+      robotGroup.visible = true;
+      // Instant jump — no real-time tracking needed
+      robotGroup.position.set(wx, 0.06, wy);
+
+      // Flash effect
+      var originalMats = [];
+      robotGroup.traverse(function(child) {
+        if (child.isMesh && child.material) {
+          originalMats.push({ mesh: child, color: child.material.color ? child.material.color.getHex() : 0xffffff });
+          child.material.emissive && child.material.emissive.set(0x10B981);
+          child.material.emissiveIntensity !== undefined && (child.material.emissiveIntensity = 1.0);
+        }
+      });
+      setTimeout(function() {
+        originalMats.forEach(function(item) {
+          if (item.mesh.material.emissiveIntensity !== undefined) {
+            item.mesh.material.emissiveIntensity = 0.3;
+          }
+        });
+      }, 800);
+    };
   </script>
 </body>
 

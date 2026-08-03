@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Award, Clock, Heart, Minus, Plus, ShieldCheck, ShoppingBag, Star } from 'lucide-react-native';
+import { ArrowLeft, Award, Clock, Minus, Plus, ShieldCheck, ShoppingBag, Star } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
@@ -39,7 +39,6 @@ export default function ProductDetailScreenMain() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
   const [quantity, setQuantity] = useState(1);
-  const [isLiked, setIsLiked] = useState(false);
   const [product, setProduct] = useState<ProductDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -93,30 +92,6 @@ export default function ProductDetailScreenMain() {
         <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
           <ArrowLeft color="#1E293B" size={24} />
         </TouchableOpacity>
-        <View style={styles.headerActions}>
-          {/* ===== CSS Transitions Demo =====
-               isLiked thay đổi → scale + opacity tự animate!
-               KHÔNG CẦN useSharedValue / useAnimatedStyle */}
-          <TouchableOpacity style={styles.iconButton} onPress={() => setIsLiked(!isLiked)}>
-            <Animated.View
-              style={{
-                // Style thay đổi theo state
-                transform: [{ scale: isLiked ? 1.35 : 1 }],
-                opacity: isLiked ? 1 : 0.6,
-                // CSS Transition config — Reanimated v4 tự tween!
-                transitionProperty: 'transform' as any,
-                transitionDuration: '250ms' as any,
-                transitionTimingFunction: 'ease-out' as any,
-              }}
-            >
-              <Heart
-                color={isLiked ? '#EF4444' : '#1E293B'}
-                size={22}
-                fill={isLiked ? '#EF4444' : 'none'}
-              />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>

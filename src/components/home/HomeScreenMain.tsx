@@ -20,6 +20,7 @@ import { MemberAdService, SponsoredRecommendationDto } from '../../services/Memb
 import { AlertTriangle } from 'lucide-react-native';
 import Voice from '@react-native-voice/voice';
 import Svg, { Circle, G, Text as SvgText } from 'react-native-svg';
+import { fixMojibake } from '../../utils/textUtils';
 const cleanSearchQuery = (query: string): string => {
   if (!query) return '';
   let cleaned = query.trim();
@@ -564,12 +565,12 @@ export default function HomeScreenMain() {
                           Khớp {meal.matchScore}%
                         </Text>
                       </View>
-                      <Text style={styles.smartCardTitle} numberOfLines={1}>{meal.recipeName}</Text>
+                      <Text style={styles.smartCardTitle} numberOfLines={1}>{fixMojibake(meal.recipeName)}</Text>
                     </LinearGradient>
                   </View>
                   <View style={styles.smartCardFooter}>
                     <Text style={styles.smartCardDesc} numberOfLines={1}>
-                      {meal.matchReasons?.[0] || `K.Phần: ${meal.yieldPortions} người • ${meal.calories ? meal.calories + ' kcal' : 'Ngon miệng'}`}
+                      {fixMojibake(meal.matchReasons?.[0]) || `K.Phần: ${meal.yieldPortions} người • ${meal.calories ? meal.calories + ' kcal' : 'Ngon miệng'}`}
                     </Text>
                     <View style={styles.smartCardActions}>
                       <TouchableOpacity style={styles.btnPrimary} onPress={() => openRecipeAssistant(meal)}>
@@ -889,7 +890,7 @@ export default function HomeScreenMain() {
               <LinearGradient colors={['transparent', 'rgba(15, 23, 42, 0.9)']} style={styles.recipeImageGradient}>
                 <View style={styles.recipeTitleRow}>
                   <Text style={styles.recipeTitleText} numberOfLines={2}>
-                    {selectedRecipe?.recipeName || 'Công thức chi tiết'}
+                    {fixMojibake(selectedRecipe?.recipeName) || 'Công thức chi tiết'}
                   </Text>
                   {selectedRecipe?.matchScore && (
                     <View style={styles.recipeScoreBadge}>

@@ -7,9 +7,11 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
 import { RobotService, RobotDto } from '../../services/RobotService';
+import { useRobotNavigation } from '../../context/RobotNavigationContext';
 
 export default function RobotSearchScreenMain() {
   const router = useRouter();
+  const { joinRobotGroup } = useRobotNavigation();
   const [robots, setRobots] = useState<RobotDto[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ONLINE' | 'BUSY' | 'OFFLINE'>('ALL');
@@ -63,6 +65,10 @@ export default function RobotSearchScreenMain() {
       await SecureStore.setItemAsync('selectedRobotCode', robot.robotCode);
       await SecureStore.setItemAsync('selectedRobotName', robot.robotName);
       setSelectedRobotCode(robot.robotCode);
+
+      // Join SignalR RobotHub group to receive navigationStatus broadcasts
+      await joinRobotGroup(robot.robotCode);
+
       alert(`Đã kết nối thành công với ${robot.robotName} (${robot.robotCode})`);
       router.back();
     } catch (e) {

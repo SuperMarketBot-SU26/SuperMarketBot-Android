@@ -1,14 +1,15 @@
 import * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Animated, ActivityIndicator, Easing, Modal } from 'react-native';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Animated, ActivityIndicator, Easing, Modal, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, CheckCircle2, Home, Bot, Compass, Star, MapPin, Maximize2, X } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle2, Home, Bot, Compass, Star, MapPin, Maximize2, X, Navigation } from 'lucide-react-native';
 import Svg, { Polyline, Line, G, Path, Polygon, Circle, Rect, Text as SvgText, Defs, LinearGradient as SvgLinearGradient, Stop, Ellipse } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import WebView from 'react-native-webview';
 import { MAP_HTML } from './mapHtml';
 import { MapService, MapData, SemanticObject, RoutePoint, MapNode } from '../../services/MapService';
+import { useRobotNavigation } from '../../context/RobotNavigationContext';
 
 const formatPrice = (price: number) => {
   return price ? price.toLocaleString('vi-VN') + ' VNĐ' : '0 VNĐ';
@@ -55,6 +56,15 @@ export const HARDCODED_MASTER_ROUTE: any[] = [
 export default function MapScreenMain() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const {
+    dispatchNavigate,
+    isRobotMoving,
+    robotNavState,
+    currentTargetNodeName,
+    toasts,
+    dismissToast,
+    setOnRobotReached,
+  } = useRobotNavigation();
   
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
@@ -63,6 +73,11 @@ export default function MapScreenMain() {
   const [pins, setPins] = useState<any[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
+  // Robot dispatch confirm modal
+  const [dispatchModalVisible, setDispatchModalVisible] = useState(false);
+  const [dispatchTarget, setDispatchTarget] = useState<{ nodeId: number; nodeName: string; x: number; y: number } | null>(null);
+  const [isDispatching, setIsDispatching] = useState(false);
+
   // WebView Refs
   const previewWebViewRef = useRef<any>(null);
   const modalWebViewRef = useRef<any>(null);
@@ -70,6 +85,54 @@ export default function MapScreenMain() {
   // Animations
   const robotPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  // Register jumpRobotToNode callback for when robot reaches destination
+  useEffect(() => {
+    setOnRobotReached((nodeId: number, nodeName: string) => {
+      // Find node coords from HARDCODED_MASTER_ROUTE
+      const node = HARDCODED_MASTER_ROUTE.find(n => n.nodeId === nodeId);
+      if (node) {
+        const jsCode = `if (window.jumpRobotToNode) { window.jumpRobotToNode(${node.x}, ${node.y}); } true;`;
+        previewWebViewRef.current?.injectJavaScript(jsCode);
+        modalWebViewRef.current?.injectJavaScript(jsCode);
+      }
+    });
+    return () => setOnRobotReached(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle WebView message (NODE_CLICKED, MAP_READY)
+  const handleWebViewMessage = useCallback((event: any) => {
+    try {
+      const msg = typeof event.nativeEvent.data === 'string'
+        ? JSON.parse(event.nativeEvent.data)
+        : event.nativeEvent.data;
+
+      if (msg.type === 'MAP_READY') {
+        sendRouteToWebViews();
+      } else if (msg.type === 'NODE_CLICKED') {
+        if (isRobotMoving) return; // Ignore clicks when busy
+        setDispatchTarget({
+          nodeId: msg.nodeId,
+          nodeName: msg.nodeName,
+          x: msg.x,
+          y: msg.y,
+        });
+        setDispatchModalVisible(true);
+      }
+    } catch (e) {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRobotMoving]);
+
+  // Confirm dispatch
+  const handleConfirmDispatch = useCallback(async () => {
+    if (!dispatchTarget) return;
+    setIsDispatching(true);
+    await dispatchNavigate(dispatchTarget.nodeId, dispatchTarget.nodeName);
+    setIsDispatching(false);
+    setDispatchModalVisible(false);
+    setDispatchTarget(null);
+  }, [dispatchTarget, dispatchNavigate]);
 
   // Category and visual styling mapping helper
   const getShelfTheme = (label: string): ShelfTheme => {
@@ -969,12 +1032,7 @@ export default function MapScreenMain() {
                  scrollEnabled={false}
                  androidHardwareAccelerationDisabled={false}
                  onLoadEnd={() => setTimeout(sendRouteToWebViews, 500)}
-                 onMessage={(event) => {
-                   try {
-                     const msg = typeof event.nativeEvent.data === 'string' ? JSON.parse(event.nativeEvent.data) : event.nativeEvent.data;
-                     if (msg.type === 'MAP_READY') sendRouteToWebViews();
-                   } catch(e) {}
-                 }}
+                 onMessage={handleWebViewMessage}
                />
              </View>
              
@@ -1042,12 +1100,7 @@ export default function MapScreenMain() {
                   allowUniversalAccessFromFileURLs={true}
                   androidHardwareAccelerationDisabled={false}
                   onLoadEnd={() => setTimeout(sendRouteToWebViews, 500)}
-                  onMessage={(event) => {
-                    try {
-                      const msg = typeof event.nativeEvent.data === 'string' ? JSON.parse(event.nativeEvent.data) : event.nativeEvent.data;
-                      if (msg.type === 'MAP_READY') sendRouteToWebViews();
-                    } catch(e) {}
-                  }}
+                  onMessage={handleWebViewMessage}
                 />
               </View>
             </SafeAreaView>
@@ -1101,6 +1154,87 @@ export default function MapScreenMain() {
           <Text style={styles.btnHomeText}>Hoàn thành & Về trang chủ</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Robot Moving Status Banner */}
+      {isRobotMoving && (
+        <View style={styles.robotMovingBanner}>
+          <ActivityIndicator size="small" color="#10B981" />
+          <Text style={styles.robotMovingText}>
+            Robot đang di chuyển đến {currentTargetNodeName}...
+          </Text>
+        </View>
+      )}
+
+      {/* Toast Overlay */}
+      {toasts.length > 0 && (
+        <View style={styles.toastContainer} pointerEvents="none">
+          {toasts.map(t => (
+            <View
+              key={t.id}
+              style={[
+                styles.toastItem,
+                t.type === 'success' && { backgroundColor: '#064E3B', borderColor: '#10B981' },
+                t.type === 'error'   && { backgroundColor: '#450A0A', borderColor: '#EF4444' },
+                t.type === 'info'    && { backgroundColor: '#0C1A3D', borderColor: '#3B82F6' },
+                t.type === 'warning' && { backgroundColor: '#451A03', borderColor: '#F59E0B' },
+              ]}
+            >
+              <Text style={styles.toastText}>{t.message}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Robot Dispatch Confirm Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={dispatchModalVisible}
+        onRequestClose={() => { if (!isDispatching) { setDispatchModalVisible(false); setDispatchTarget(null); } }}
+      >
+        <View style={styles.dispatchOverlay}>
+          <View style={styles.dispatchModal}>
+            <View style={styles.dispatchIconRow}>
+              <View style={styles.dispatchIconBg}>
+                <Navigation color="#10B981" size={28} />
+              </View>
+            </View>
+            <Text style={styles.dispatchTitle}>Điều phối Robot</Text>
+            <Text style={styles.dispatchSubtitle}>
+              Bạn muốn điều hướng Robot đến vị trí
+            </Text>
+            <Text style={styles.dispatchNodeName}>
+              {dispatchTarget?.nodeName ?? ''}
+            </Text>
+
+            {isRobotMoving && robotNavState !== 'DISPATCHING' ? (
+              <View style={styles.dispatchBusyNote}>
+                <Text style={styles.dispatchBusyText}>Robot đang bận. Vui lòng đợi.</Text>
+              </View>
+            ) : (
+              <View style={styles.dispatchActions}>
+                <TouchableOpacity
+                  style={styles.dispatchCancelBtn}
+                  onPress={() => { setDispatchModalVisible(false); setDispatchTarget(null); }}
+                  disabled={isDispatching}
+                >
+                  <Text style={styles.dispatchCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.dispatchConfirmBtn, isDispatching && { opacity: 0.6 }]}
+                  onPress={handleConfirmDispatch}
+                  disabled={isDispatching}
+                >
+                  {isDispatching
+                    ? <ActivityIndicator size="small" color="white" />
+                    : <Text style={styles.dispatchConfirmText}>Xác nhận</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1258,5 +1392,152 @@ const styles = StyleSheet.create({
     paddingVertical: 18, borderRadius: 100, shadowColor: '#059669', shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35, shadowRadius: 12, elevation: 6
   },
-  btnHomeText: { color: 'white', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 }
+  btnHomeText: { color: 'white', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+
+  // ── Robot Navigation UI ──────────────────────────────────────────────
+  robotMovingBanner: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#064E3B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#10B981',
+    gap: 10,
+  },
+  robotMovingText: {
+    color: '#A7F3D0',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
+
+  toastContainer: {
+    position: 'absolute',
+    bottom: 60,
+    left: 16,
+    right: 16,
+    gap: 8,
+    zIndex: 999,
+  },
+  toastItem: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  toastText: {
+    color: '#F1F5F9',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+
+  // Dispatch confirm modal
+  dispatchOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  dispatchModal: {
+    backgroundColor: '#0F172A',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 28,
+    paddingBottom: 40,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+  },
+  dispatchIconRow: {
+    marginBottom: 16,
+  },
+  dispatchIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: '#064E3B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  dispatchTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#F8FAFC',
+    marginBottom: 8,
+  },
+  dispatchSubtitle: {
+    fontSize: 14,
+    color: '#94A3B8',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  dispatchNodeName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#10B981',
+    marginTop: 4,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  dispatchActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  dispatchCancelBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  dispatchCancelText: {
+    color: '#94A3B8',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dispatchConfirmBtn: {
+    flex: 2,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  dispatchConfirmText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  dispatchBusyNote: {
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    padding: 14,
+    width: '100%',
+    alignItems: 'center',
+  },
+  dispatchBusyText: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });
+

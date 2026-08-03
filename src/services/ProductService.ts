@@ -92,4 +92,27 @@ export class ProductService {
       promotionPrice: item.promotionPrice || item.dealPrice,
     }));
   }
+
+  static async getAlternatives(id: number | string, memberId?: number): Promise<ProductDto[]> {
+    let url = `${BASE_URL}/api/Products/${id}/alternatives`;
+    if (memberId) {
+      url += `?memberId=${memberId}`;
+    }
+    console.log(`[ProductService.getAlternatives] GET ${url}`);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[ProductService.getAlternatives] Failed (${response.status})`);
+      return [];
+    }
+
+    const json = await response.json();
+    return json as ProductDto[];
+  }
 }

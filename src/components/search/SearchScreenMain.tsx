@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, ArrowRight, FileText, Map, Plus, ShoppingBag, Star, User, Zap } from 'lucide-react-native';
+import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Map, Plus, ShoppingBag, Star, User, Zap } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
@@ -10,6 +10,7 @@ import { SearchService, SearchResultItemDto } from '../../services/SearchService
 import { CartService } from '../../services/CartService';
 import { ProductService, ProductDto } from '../../services/ProductService';
 import { PersonalizationService } from '../../services/PersonalizationService';
+import { fixMojibake } from '../../utils/textUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ export default function SearchScreenMain() {
   const [aiSuggestions, setAiSuggestions] = useState<ProductDto[]>([]);
   const [aiRanked, setAiRanked] = useState(false);
   const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+  const [restrictedInfo, setRestrictedInfo] = useState<{ isRestricted: boolean; productName: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +38,7 @@ export default function SearchScreenMain() {
       console.log(`[SearchScreenMain] Bắt đầu tìm kiếm với Query: "${searchQuery}", Mode: "${mode}", MemberId: ${auth?.profile?.memberId || 'N/A'}`);
       setLoading(true);
       setError(null);
+      setRestrictedInfo(null);
       try {
         const isPersonal = mode === 'personal';
         let searchResults;
@@ -58,10 +61,24 @@ export default function SearchScreenMain() {
         setAiExplanation(searchResults.aiExplanation || null);
 
         // Fetch products for suggestions (use personalized if in personal mode)
-        let products = [];
+        let products: ProductDto[] = [];
         try {
           if (isPersonal) {
-            products = await PersonalizationService.getPersonalizedProducts() as any;
+            // Nếu kết quả tìm kiếm cá nhân hóa = 0 (do bị lọc dị ứng/tránh), 
+            // tìm sản phẩm gốc và gọi API alternatives để lấy đúng các sản phẩm thay thế an toàn
+            if ((!searchResults.results || searchResults.results.length === 0) && searchQuery) {
+              const rawAll = await SearchService.searchAll({ q: searchQuery as string });
+              if (rawAll.results && rawAll.results.length > 0) {
+                const targetProduct = rawAll.results[0];
+                setRestrictedInfo({ isRestricted: true, productName: targetProduct.productName });
+                console.log(`[SearchScreenMain] Sản phẩm gốc #${targetProduct.productId} (${targetProduct.productName}) bị dị ứng. Đang lấy sản phẩm thay thế...`);
+                products = await ProductService.getAlternatives(targetProduct.productId, auth?.profile?.memberId);
+              }
+            }
+
+            if (!products || products.length === 0) {
+              products = (await PersonalizationService.getPersonalizedProducts()) as any;
+            }
           } else {
             products = await ProductService.getProducts();
           }
@@ -112,7 +129,7 @@ export default function SearchScreenMain() {
 
     return {
       id: item.productId.toString(),
-      title: item.productName,
+      title: fixMojibake(item.productName),
       image: item.imageUrl || fallbackImage,
       tags,
       rating: 4.8,
@@ -192,17 +209,29 @@ export default function SearchScreenMain() {
               </Animated.View>
             )}
 
-            {/* Results Info */}
-            <Animated.View entering={FadeInDown.delay(150)} style={styles.resultsInfo}>
-              <Text style={styles.resultsTitle}>Kết quả phù hợp</Text>
-              <Text style={styles.resultsCount}>{mappedResults.length} sản phẩm</Text>
-            </Animated.View>
+            {/* Results Info or Allergy Warning */}
+            {restrictedInfo?.isRestricted ? (
+              <Animated.View entering={FadeInDown.delay(150)} style={styles.allergyCard}>
+                <View style={styles.allergyHeader}>
+                  <AlertTriangle color="#DC2626" size={20} style={{ marginRight: 8 }} />
+                  <Text style={styles.allergyTitle}>Cảnh báo dị ứng & Chế độ ăn</Text>
+                </View>
+                <Text style={styles.allergyText}>
+                  Sản phẩm <Text style={styles.allergyBold}>"{restrictedInfo.productName}"</Text> chứa thành phần dị ứng hoặc không phù hợp với chế độ ăn của bạn. Hệ thống đã tự động lọc ẩn sản phẩm này để bảo vệ sức khỏe cho bạn.
+                </Text>
+              </Animated.View>
+            ) : (
+              <Animated.View entering={FadeInDown.delay(150)} style={styles.resultsInfo}>
+                <Text style={styles.resultsTitle}>Kết quả phù hợp</Text>
+                <Text style={styles.resultsCount}>{mappedResults.length} sản phẩm</Text>
+              </Animated.View>
+            )}
 
-            {mappedResults.length === 0 ? (
+            {mappedResults.length === 0 && !restrictedInfo?.isRestricted ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>Không tìm thấy sản phẩm nào phù hợp.</Text>
               </View>
-            ) : (
+            ) : mappedResults.length > 0 ? (
               /* Product List */
               <View style={styles.productList}>
                 {mappedResults.map((product, index) => (
@@ -257,19 +286,23 @@ export default function SearchScreenMain() {
                   </View>
                 ))}
               </View>
-            )}
+            ) : null}
           </>
         )}
 
         {/* AI Suggestions */}
-        <Animated.View entering={FadeInDown.delay(500)} style={styles.aiSection}>
+        <Animated.View entering={FadeInDown.delay(300)} style={styles.aiSection}>
           <View style={styles.aiHeader}>
-            <View style={styles.aiIconBox}>
+            <View style={[styles.aiIconBox, restrictedInfo?.isRestricted && { backgroundColor: '#059669' }]}>
               <Zap color="white" size={16} fill="white" />
             </View>
-            <View>
-              <Text style={styles.aiTitle}>Gợi ý dành cho bạn</Text>
-              <Text style={styles.aiSubtitle}>Lựa chọn thay thế tốt cho sức khỏe</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.aiTitle}>
+                {restrictedInfo?.isRestricted ? 'Sản phẩm thay thế an toàn dành cho bạn' : 'Gợi ý dành cho bạn'}
+              </Text>
+              <Text style={styles.aiSubtitle}>
+                {restrictedInfo?.isRestricted ? 'An toàn tuyệt đối khỏi chất dị ứng & phù hợp chế độ ăn' : 'Lựa chọn thay thế tốt cho sức khỏe'}
+              </Text>
             </View>
           </View>
 
@@ -285,7 +318,7 @@ export default function SearchScreenMain() {
                     <Star color="#EA580C" size={12} fill="#EA580C" style={{ marginRight: 4 }} />
                     <Text style={styles.aiTagText}>Đề xuất AI</Text>
                   </View>
-                  <Text style={styles.aiLargeTitle}>{aiSuggestions[0].productName}</Text>
+                  <Text style={styles.aiLargeTitle}>{fixMojibake(aiSuggestions[0].productName)}</Text>
                   <Text style={styles.aiLargeDesc}>Sản phẩm thay thế tuyệt vời từ cửa hàng.</Text>
                   <View style={styles.aiPriceRow}>
                     <Text style={styles.aiLargePrice}>{aiSuggestions[0].unitPrice.toLocaleString('vi-VN')}đ</Text>
@@ -301,7 +334,7 @@ export default function SearchScreenMain() {
                 {aiSuggestions.slice(1, 3).map((item) => (
                   <TouchableOpacity key={item.productId} style={styles.aiSmallCard} onPress={() => router.push({ pathname: '/product', params: { id: item.productId } })}>
                     <Image source={{ uri: item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop' }} style={styles.aiSmallImage} />
-                    <Text style={styles.aiSmallTitle} numberOfLines={1}>{item.productName}</Text>
+                    <Text style={styles.aiSmallTitle} numberOfLines={1}>{fixMojibake(item.productName)}</Text>
                     <Text style={styles.aiSmallDesc} numberOfLines={2}>Phù hợp với nhu cầu của bạn.</Text>
                     <Text style={styles.aiSmallPrice}>{item.unitPrice.toLocaleString('vi-VN')}đ</Text>
                   </TouchableOpacity>
@@ -781,5 +814,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
+  },
+  allergyCard: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 16,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  allergyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  allergyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#991B1B',
+  },
+  allergyText: {
+    fontSize: 13,
+    color: '#7F1D1D',
+    lineHeight: 20,
+  },
+  allergyBold: {
+    fontWeight: '800',
+    color: '#DC2626',
   },
 });

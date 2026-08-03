@@ -34,8 +34,27 @@ export interface PublishRobotCommandRequestDto {
 
 export interface NavigateRobotRequestDto {
   robotCode: string;
-  destinationNodeId: string;
+  destinationNodeId: string; // string — matches BE DestinationNodeId
   waypointNodeIds?: string[] | null;
+}
+
+// SignalR payload from /hubs/robot → event "navigationStatus"
+export interface RobotNavigationStatusDto {
+  robotCode: string;
+  navStatus: string;       // e.g. "REACHED", "ABORTED", "MOVING", "IDLE"
+  currentWaypoint?: string | null;
+  timestamp: string;
+}
+
+// SignalR payload from /hubs/robot → event "status"
+export interface RobotStatusSignalRDto {
+  robotCode: string;
+  battery?: number | null;
+  location?: string | null;
+  status?: string | null;
+  mode?: string | null;
+  isOnline?: boolean | null;
+  timestampUtc: string;
 }
 
 const parseErrorBody = async (response: Response) => {
