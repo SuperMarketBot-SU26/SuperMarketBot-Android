@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Award, Clock, Minus, Plus, ShieldCheck, ShoppingBag, Star } from 'lucide-react-native';
+import { ArrowLeft, Award, Clock, Minus, Plus, ShieldCheck, ShoppingBag, Star, Bot } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
@@ -208,33 +208,58 @@ export default function ProductDetailScreenMain() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          onPress={async () => {
-            try {
+        <View style={{ flexDirection: 'row', flex: 1, gap: 12, marginLeft: 16 }}>
+          <TouchableOpacity
+            onPress={() => {
               if (product) {
-                await CartService.addItem(product.productId, quantity);
-                ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
+                router.push({
+                  pathname: '/navigation-map',
+                  params: { endObjectId: product.productId }
+                });
               }
-            } catch (e: any) {
-              ToastAndroid.show(e.message, ToastAndroid.LONG);
-            }
-          }}
-          activeOpacity={0.8}
-          style={{
-            flex: 1,
-            borderRadius: 16,
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'row',
-            gap: 8,
-            paddingVertical: 16,
-            paddingHorizontal: 24,
-            backgroundColor: '#059669',
-          }}
-        >
-          <ShoppingBag color="white" size={20} />
-          <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
-        </TouchableOpacity>
+            }}
+            activeOpacity={0.8}
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#EFF6FF',
+              borderWidth: 1,
+              borderColor: '#BFDBFE',
+            }}
+          >
+            <Bot color="#3B82F6" size={24} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                if (product) {
+                  await CartService.addItem(product.productId, quantity);
+                  ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
+                }
+              } catch (e: any) {
+                ToastAndroid.show(e.message, ToastAndroid.LONG);
+              }
+            }}
+            activeOpacity={0.8}
+            style={{
+              flex: 1,
+              height: 52,
+              borderRadius: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              gap: 8,
+              backgroundColor: '#059669',
+            }}
+          >
+            <ShoppingBag color="white" size={20} />
+            <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );

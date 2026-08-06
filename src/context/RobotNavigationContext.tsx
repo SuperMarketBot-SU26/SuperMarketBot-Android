@@ -1,10 +1,10 @@
-/**
+ï»¿/**
  * RobotNavigationContext.tsx
  *
- * Global state cho ch?c nang Ði?u Hu?ng Robot (Asynchronous Dispatch).
+ * Global state cho ch?c nang Ãi?u Hu?ng Robot (Asynchronous Dispatch).
  *
  * Lu?ng:
- *   1. User ch?n node trên b?n d? -> g?i dispatchNavigate()
+ *   1. User ch?n node trÃªn b?n d? -> g?i dispatchNavigate()
  *   2. dispatchNavigate() g?i POST /api/Robots/navigate -> tr? v? 202 Accepted
  *   3. L?ng nghe SignalR /hubs/robot event "navigationStatus" d? nh?n k?t qu?
  *
@@ -36,9 +36,9 @@ import { useAuth } from './AuthContext';
 
 export type RobotNavState =
   | 'IDLE'
-  | 'DISPATCHING'   // Ðang g?i API
-  | 'MOVING'        // Robot dang trên du?ng
-  | 'REACHED'       // Ðã d?n noi
+  | 'DISPATCHING'   // Ãang g?i API
+  | 'MOVING'        // Robot dang trÃªn du?ng
+  | 'REACHED'       // ÃÃ£ d?n noi
   | 'ABORTED'       // L?i / h?y
   | 'ERROR';
 
@@ -66,7 +66,7 @@ interface RobotNavigationContextProps {
   dismissToast: (id: string) => void;
   resetNavState: () => void;
 
-  // Callback dang ký d? nh?n l?nh jumpRobotToNode khi dã d?n dích
+  // Callback dang kÃ½ d? nh?n l?nh jumpRobotToNode khi dÃ£ d?n dÃ­ch
   onRobotReached: ((nodeId: number, nodeName: string) => void) | null;
   setOnRobotReached: (cb: ((nodeId: number, nodeName: string) => void) | null) => void;
 }
@@ -163,11 +163,11 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
         .withAutomaticReconnect([0, 2000, 5000, 10000])
         .build();
 
-      // Event: "navigationStatus" — k?t qu? di?u hu?ng
+      // Event: "navigationStatus" â€” k?t qu? di?u hu?ng
       connection.on('navigationStatus', (payload: RobotNavigationStatusDto) => {
         console.log('[RobotHub] navigationStatus:', payload);
-        const navStatus = (payload.navStatus || '').toUpperCase();
-        const targetName = targetNodeNameRef.current || payload.currentWaypoint || 'dích';
+        const navStatus = (payload.status || payload.navStatus || '').toUpperCase();
+        const targetName = targetNodeNameRef.current || payload.waypoint || payload.currentWaypoint || 'dich';
 
         if (navStatus === 'REACHED' || navStatus === 'ARRIVED') {
           setRobotNavState('REACHED');
@@ -176,16 +176,16 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
             onRobotReached(targetNodeIdRef.current, targetNodeNameRef.current);
           }
           setTimeout(() => setRobotNavState('IDLE'), 2000);
-        } else if (navStatus === 'ABORTED' || navStatus === 'FAILED' || navStatus === 'ERROR') {
+        } else if (navStatus === 'ABORTED' || navStatus === 'FAILED' || navStatus === 'CANCELLED' || navStatus === 'ERROR') {
           setRobotNavState('ABORTED');
           addToast(`Robot khong the den dich (${navStatus.toLowerCase()})`, 'error');
           setTimeout(() => setRobotNavState('IDLE'), 3000);
-        } else if (navStatus === 'MOVING' || navStatus === 'NAVIGATING') {
+        } else if (navStatus === 'MOVING' || navStatus === 'NAVIGATING' || navStatus === 'EXECUTING') {
           setRobotNavState('MOVING');
         }
       });
 
-      // Event: "status" — tr?ng thái chung c?a robot
+      // Event: "status" â€” tr?ng thÃ¡i chung c?a robot
       connection.on('status', (payload: RobotStatusSignalRDto) => {
         console.log('[RobotHub] status:', payload);
       });
@@ -301,3 +301,4 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
     </RobotNavigationContext.Provider>
   );
 };
+

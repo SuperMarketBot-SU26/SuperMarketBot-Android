@@ -41,9 +41,11 @@ export interface NavigateRobotRequestDto {
 // SignalR payload from /hubs/robot → event "navigationStatus"
 export interface RobotNavigationStatusDto {
   robotCode: string;
-  navStatus: string;       // e.g. "REACHED", "ABORTED", "MOVING", "IDLE"
+  navStatus?: string;       // e.g. "REACHED", "ABORTED", "MOVING", "IDLE"
   currentWaypoint?: string | null;
-  timestamp: string;
+  status?: string;          // New API: "EXECUTING", "ARRIVED", "CANCELLED", "FAILED"
+  waypoint?: string | null; // New API
+  timestamp: string | number;
 }
 
 // SignalR payload from /hubs/robot → event "status"

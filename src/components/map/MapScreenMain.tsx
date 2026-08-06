@@ -6,10 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, CheckCircle2, Home, Bot, Compass, Star, MapPin, Maximize2, X, Navigation } from 'lucide-react-native';
 import Svg, { Polyline, Line, G, Path, Polygon, Circle, Rect, Text as SvgText, Defs, LinearGradient as SvgLinearGradient, Stop, Ellipse } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import WebView from 'react-native-webview';
-import { MAP_HTML } from './mapHtml';
 import { MapService, MapData, SemanticObject, RoutePoint, MapNode } from '../../services/MapService';
 import { useRobotNavigation } from '../../context/RobotNavigationContext';
+import { NavigationService } from '../../services/NavigationService';
 
 const formatPrice = (price: number) => {
   return price ? price.toLocaleString('vi-VN') + ' VNĐ' : '0 VNĐ';
@@ -78,9 +77,6 @@ export default function MapScreenMain() {
   const [dispatchTarget, setDispatchTarget] = useState<{ nodeId: number; nodeName: string; x: number; y: number } | null>(null);
   const [isDispatching, setIsDispatching] = useState(false);
 
-  // WebView Refs
-  const previewWebViewRef = useRef<any>(null);
-  const modalWebViewRef = useRef<any>(null);
 
   // Animations
   const robotPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
@@ -93,36 +89,14 @@ export default function MapScreenMain() {
       const node = HARDCODED_MASTER_ROUTE.find(n => n.nodeId === nodeId);
       if (node) {
         const jsCode = `if (window.jumpRobotToNode) { window.jumpRobotToNode(${node.x}, ${node.y}); } true;`;
-        previewWebViewRef.current?.injectJavaScript(jsCode);
-        modalWebViewRef.current?.injectJavaScript(jsCode);
+        // previewWebViewRef.current?.injectJavaScript(jsCode);
+        // modalWebViewRef.current?.injectJavaScript(jsCode);
       }
     });
     return () => setOnRobotReached(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle WebView message (NODE_CLICKED, MAP_READY)
-  const handleWebViewMessage = useCallback((event: any) => {
-    try {
-      const msg = typeof event.nativeEvent.data === 'string'
-        ? JSON.parse(event.nativeEvent.data)
-        : event.nativeEvent.data;
-
-      if (msg.type === 'MAP_READY') {
-        sendRouteToWebViews();
-      } else if (msg.type === 'NODE_CLICKED') {
-        if (isRobotMoving) return; // Ignore clicks when busy
-        setDispatchTarget({
-          nodeId: msg.nodeId,
-          nodeName: msg.nodeName,
-          x: msg.x,
-          y: msg.y,
-        });
-        setDispatchModalVisible(true);
-      }
-    } catch (e) {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRobotMoving]);
 
   // Confirm dispatch
   const handleConfirmDispatch = useCallback(async () => {
@@ -421,29 +395,7 @@ export default function MapScreenMain() {
     setPins(finalPins);
   }, [mapData, invoiceData]);
 
-  const sendRouteToWebViews = () => {
-    const waypoints = HARDCODED_MASTER_ROUTE;
-    const data = { waypoints };
-    console.log('[React Native Map Log] sendRouteToWebViews sending:', JSON.stringify(data, null, 2));
-    const jsCode = `
-      if (window.setRouteData) {
-        window.setRouteData(${JSON.stringify(data)});
-      } else if (window.visualize3DRoute) {
-        window.visualize3DRoute(${JSON.stringify(data)});
-      }
-      true;
-    `;
-    previewWebViewRef.current?.injectJavaScript(jsCode);
-    modalWebViewRef.current?.injectJavaScript(jsCode);
-  };
 
-  useEffect(() => {
-    if (routePoints.length > 0 || pins.length > 0) {
-      sendRouteToWebViews();
-      const timer = setTimeout(sendRouteToWebViews, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [routePoints, pins]);
 
   if (loading || !mapData) {
     return (
@@ -1022,18 +974,7 @@ export default function MapScreenMain() {
           {/* Tap to expand preview card */}
           <TouchableOpacity activeOpacity={0.9} style={styles.mapPreviewClickable} onPress={() => setIsModalVisible(true)}>
              <View style={{ width: '100%', height: 280, borderRadius: 16, overflow: 'hidden' }}>
-               <WebView
-                 ref={previewWebViewRef}
-                 originWhitelist={['*']}
-                 source={{ html: MAP_HTML, baseUrl: 'http://localhost:5000' }}
-                 style={{ flex: 1, backgroundColor: '#0B0F17' }}
-                 javaScriptEnabled={true}
-                 domStorageEnabled={true}
-                 scrollEnabled={false}
-                 androidHardwareAccelerationDisabled={false}
-                 onLoadEnd={() => setTimeout(sendRouteToWebViews, 500)}
-                 onMessage={handleWebViewMessage}
-               />
+               {renderMapContent(CANVAS_SIZE, false)}
              </View>
              
              {/* Glassmorphic expand indicator banner */}
@@ -1089,19 +1030,7 @@ export default function MapScreenMain() {
               </View>
 
               <View style={{ flex: 1 }}>
-                <WebView
-                  ref={modalWebViewRef}
-                  originWhitelist={['*']}
-                  source={{ html: MAP_HTML, baseUrl: 'http://localhost:5000' }}
-                  style={{ flex: 1, backgroundColor: '#0B0F17' }}
-                  javaScriptEnabled={true}
-                  domStorageEnabled={true}
-                  allowFileAccess={true}
-                  allowUniversalAccessFromFileURLs={true}
-                  androidHardwareAccelerationDisabled={false}
-                  onLoadEnd={() => setTimeout(sendRouteToWebViews, 500)}
-                  onMessage={handleWebViewMessage}
-                />
+                {renderMapContent(CANVAS_SIZE, false)}
               </View>
             </SafeAreaView>
           </Modal>
