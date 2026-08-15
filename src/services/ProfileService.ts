@@ -9,6 +9,7 @@ export interface ProfileDto {
   facePath?: string;
   imageBase64?: string;
   totalPoints?: number;
+  totalSpent?: number;
   spendingLimit?: number | null;
   membershipTier?: string;
   accountStatus?: string;
@@ -150,5 +151,16 @@ export class ProfileService {
     }
 
     return true;
+  }
+
+  static async getOrderHistory(): Promise<any[]> {
+    const headers = await getAuthHeaders();
+    console.log(`[ProfileService.getOrderHistory] GET ${BASE_URL}/api/members/me/orders`);
+    const response = await fetch(`${BASE_URL}/api/members/me/orders`, { headers });
+    if (!response.ok) {
+      console.warn(`[ProfileService.getOrderHistory] Failed with status: ${response.status}`);
+      return [];
+    }
+    return response.json();
   }
 }

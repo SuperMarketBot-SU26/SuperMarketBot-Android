@@ -1,6 +1,6 @@
 import React from 'react';
-import MapScreenMain from '../components/map/MapScreenMain';
+import MapScreenWebViewMain from '../components/map/MapScreenWebViewMain';
 
 export default function MapScreen() {
-  return <MapScreenMain />;
+  return <MapScreenWebViewMain />;
 }

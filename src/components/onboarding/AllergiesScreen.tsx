@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Platform, ToastAndroid } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ArrowRight, ShieldAlert, CheckCircle2, Circle, Droplets, Fish, Leaf, Wheat, Egg, Sprout } from 'lucide-react-native';
@@ -77,11 +77,12 @@ export default function AllergiesScreen() {
       ];
 
       await PersonalizationService.updateHealthPreferences(preferences as any);
-
-    } catch (e) {
+      
+      router.push('/onboarding/budget');
+    } catch (e: any) {
       console.warn('Error saving health preferences:', e);
+      ToastAndroid.show(e.message || 'Có lỗi xảy ra', ToastAndroid.LONG);
     }
-    router.push('/onboarding/budget');
   };
 
   const handleSkip = async () => {

@@ -1,17 +1,64 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, HelpCircle, ShoppingBag, Truck, Package, CheckCircle2, RefreshCw, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, ChevronUp, Bell, HelpCircle, ShoppingBag, Truck, Package, CheckCircle2, RefreshCw, Sparkles, X, Map as MapIcon } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { WebView } from 'react-native-webview';
+import { ProfileService } from '../../services/ProfileService';
+import { MAP_HTML } from '../map/MapHtml';
 
 // Dummy data for filter tabs
 const FILTERS = ['Tất cả', 'Tháng này', 'Đã giao', 'Đang xử lý'];
 
 export default function OrderHistoryScreenMain() {
   const router = useRouter();
+  const webViewRef = useRef<WebView>(null);
   const [activeFilter, setActiveFilter] = useState('Tất cả');
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [isMapVisible, setIsMapVisible] = useState(false);
+  const [selectedRoute, setSelectedRoute] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const data = await ProfileService.getOrderHistory();
+        setOrders(data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrders();
+  }, []);
+
+  const toggleExpand = (id: number) => {
+    setExpandedId(expandedId === id ? null : id);
+  };
+
+  const openMap = (order: any) => {
+    // Ideally we would fetch the route for this specific order
+    // But for now, we mock the data as requested by the user.
+    const mockRoute = {
+      path: [
+        { x: 2.80, y: 2.00, nodeName: "D01" },
+        { x: 2.45, y: 2.00, nodeName: "C03" },
+        { x: 2.45, y: 0.80, nodeName: "S04", productId: order.items?.[0]?.productId || 1 },
+        { x: 2.10, y: 2.45, nodeName: "Checkout" }
+      ]
+    };
+    
+    router.push({
+      pathname: '/map' as any,
+      params: {
+        routePlan: JSON.stringify(mockRoute.path)
+      }
+    });
+  };
 
   return (
     <LinearGradient
@@ -26,17 +73,14 @@ export default function OrderHistoryScreenMain() {
             <ChevronLeft color="#4B5563" size={24} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>SmartMarketBot</Text>
-          {/* <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconBtnRight}>
-              <Bell color="#4B5563" size={20} />
-            </TouchableOpacity>
+          <View style={styles.headerRight}>
             <TouchableOpacity onPress={() => router.push('/profile')}>
               <Image
                 source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }}
                 style={styles.avatar}
               />
             </TouchableOpacity>
-          </View> */}
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -66,125 +110,93 @@ export default function OrderHistoryScreenMain() {
             </ScrollView>
           </Animated.View>
 
-          {/* This Month Section */}
+          {/* Filter Section logic - we can keep it but actually apply to real data */}
+          {/* Active Filter logic could be applied here if needed. We'll show all. */}
+
           <Animated.View entering={FadeInDown.delay(300)}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionMarker} />
-              <Text style={styles.sectionTitle}>Tháng này</Text>
+              <Text style={styles.sectionTitle}>Danh sách đơn hàng</Text>
             </View>
 
-            {/* Order Card 1 */}
-            <View style={styles.orderCard}>
-              <View style={styles.orderHeader}>
-                <View style={[styles.iconBox, { backgroundColor: '#F0FDF4' }]}>
-                  <ShoppingBag color="#059669" size={24} />
-                </View>
-                <View style={styles.orderHeaderInfo}>
-                  <Text style={styles.orderId}>Đơn hàng #FA-92834</Text>
-                  <Text style={styles.orderDate}>15 Tháng 10, 2023 • 14:30</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: '#DCFCE7' }]}>
-                    <CheckCircle2 color="#16A34A" size={14} />
-                    <Text style={[styles.statusText, { color: '#16A34A' }]}>Đã giao</Text>
+            {loading ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <Text style={{ color: '#6B7280' }}>Đang tải...</Text>
+              </View>
+            ) : orders.length === 0 ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <Text style={{ color: '#6B7280' }}>Chưa có đơn hàng nào</Text>
+              </View>
+            ) : (
+              orders.map((order, idx) => {
+                const isExpanded = expandedId === order.invoiceHistoryId;
+                return (
+                  <View key={order.invoiceHistoryId} style={styles.orderCard}>
+                    <TouchableOpacity onPress={() => toggleExpand(order.invoiceHistoryId)} activeOpacity={0.8}>
+                      <View style={styles.orderHeader}>
+                        <View style={[styles.iconBox, { backgroundColor: '#F0FDF4' }]}>
+                          <ShoppingBag color="#059669" size={24} />
+                        </View>
+                        <View style={styles.orderHeaderInfo}>
+                          <Text style={styles.orderId}>Đơn hàng #{order.invoiceHistoryId}</Text>
+                          <Text style={styles.orderDate}>{new Date(order.purchaseDate).toLocaleString('vi-VN')}</Text>
+                          <View style={[styles.statusBadge, { backgroundColor: '#DCFCE7' }]}>
+                            <CheckCircle2 color="#16A34A" size={14} />
+                            <Text style={[styles.statusText, { color: '#16A34A' }]}>Hoàn thành</Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={styles.orderDetails}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <View>
+                            <Text style={[styles.orderPrice, { color: '#059669' }]}>{order.totalPrice.toLocaleString('vi-VN')}đ</Text>
+                            <Text style={styles.itemCount}>{order.items?.length || 0} sản phẩm</Text>
+                          </View>
+                          {isExpanded ? <ChevronUp color="#9CA3AF" size={20} /> : <ChevronDown color="#9CA3AF" size={20} />}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    {isExpanded && (
+                      <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12 }}>
+                        {order.items?.map((item: any, i: number) => (
+                          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                            <Image 
+                              source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} 
+                              style={styles.productThumbnail} 
+                            />
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                              <Text style={{ fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 4 }} numberOfLines={2}>
+                                {item.productName}
+                              </Text>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                <Text style={{ fontSize: 13, color: '#6B7280' }}>{item.unitPrice.toLocaleString('vi-VN')}đ</Text>
+                                <Text style={{ fontSize: 13, fontWeight: '600', color: '#1F2937' }}>x{item.quantity}</Text>
+                              </View>
+                            </View>
+                          </View>
+                        ))}
+                        
+                        <View style={styles.actionButtons}>
+                          <TouchableOpacity 
+                            style={[styles.btnOutline, { flex: 1 }]}
+                            onPress={() => openMap(order)}
+                          >
+                            <MapIcon color="#059669" size={16} style={{ marginRight: 6 }} />
+                            <Text style={styles.btnOutlineText}>Xem lộ trình</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[styles.btnSolid, { flex: 1, marginLeft: 12 }]}>
+                            <RefreshCw color="white" size={16} style={{ marginRight: 6 }} />
+                            <Text style={styles.btnSolidText}>Mua lại</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
                   </View>
-                </View>
-              </View>
-
-              <View style={styles.orderDetails}>
-                <View>
-                  <Text style={[styles.orderPrice, { color: '#059669' }]}>450.000đ</Text>
-                  <Text style={styles.itemCount}>6 sản phẩm</Text>
-                </View>
-              </View>
-
-              <View style={styles.productImages}>
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1459411621453-7b03977f4bfc?auto=format&fit=crop&q=80&w=100' }} style={styles.productThumbnail} />
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1582979512210-99b6a53386f9?auto=format&fit=crop&q=80&w=100' }} style={styles.productThumbnail} />
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&q=80&w=100' }} style={styles.productThumbnail} />
-                <View style={styles.moreProductsBadge}>
-                  <Text style={styles.moreProductsText}>+3</Text>
-                </View>
-              </View>
-
-              <View style={styles.actionButtons}>
-                <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]}>
-                  <Text style={styles.btnOutlineText}>Xem chi tiết</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.btnSolid, { flex: 1, marginLeft: 12 }]}>
-                  <RefreshCw color="white" size={16} style={{ marginRight: 6 }} />
-                  <Text style={styles.btnSolidText}>Mua lại</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Order Card 2 */}
-            <View style={styles.orderCard}>
-              <View style={styles.orderHeader}>
-                <View style={[styles.iconBox, { backgroundColor: '#FFF7ED' }]}>
-                  <Truck color="#EA580C" size={24} />
-                </View>
-                <View style={styles.orderHeaderInfo}>
-                  <Text style={styles.orderId}>Đơn hàng #FA-92841</Text>
-                  <Text style={styles.orderDate}>Hôm nay • 09:15</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: '#FFEDD5' }]}>
-                    <RefreshCw color="#EA580C" size={14} />
-                    <Text style={[styles.statusText, { color: '#EA580C' }]}>Đang xử lý</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.orderDetails}>
-                <View>
-                  <Text style={styles.orderPrice}>1.250.000đ</Text>
-                  <Text style={styles.itemCount}>12 sản phẩm</Text>
-                </View>
-              </View>
-
-              <View style={styles.actionButtons}>
-                <TouchableOpacity style={[styles.btnOutline, { flex: 1 }]}>
-                  <Text style={styles.btnOutlineText}>Xem lộ trình</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Animated.View>
-
-          {/* Last Month Section */}
-          <Animated.View entering={FadeInDown.delay(400)} style={{ marginTop: 16 }}>
-            <View style={styles.sectionHeader}>
-              <View style={[styles.sectionMarker, { backgroundColor: '#9CA3AF' }]} />
-              <Text style={styles.sectionTitle}>Tháng trước</Text>
-            </View>
-
-            {/* Order Card 3 */}
-            <View style={[styles.orderCard, { opacity: 0.7 }]}>
-              <View style={styles.orderHeader}>
-                <View style={[styles.iconBox, { backgroundColor: '#F3F4F6' }]}>
-                  <Package color="#9CA3AF" size={24} />
-                </View>
-                <View style={styles.orderHeaderInfo}>
-                  <Text style={styles.orderId}>Đơn hàng #FA-91022</Text>
-                  <Text style={styles.orderDate}>28 Tháng 9, 2023 • 18:45</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: '#F3F4F6' }]}>
-                    <Text style={[styles.statusText, { color: '#6B7280', marginLeft: 0 }]}>Đã hoàn thành</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.orderDetails}>
-                <View>
-                  <Text style={[styles.orderPrice, { color: '#6B7280' }]}>320.000đ</Text>
-                </View>
-              </View>
-
-              <View style={styles.actionButtons}>
-                <TouchableOpacity style={[styles.btnOutline, { flex: 1, borderColor: '#F3F4F6', backgroundColor: '#F3F4F6' }]}>
-                  <Text style={[styles.btnOutlineText, { color: '#9CA3AF' }]}>Xem chi tiết</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.btnSolid, { flex: 1, marginLeft: 12, backgroundColor: '#DCFCE7' }]}>
-                  <RefreshCw color="#16A34A" size={16} style={{ marginRight: 6 }} />
-                  <Text style={[styles.btnSolidText, { color: '#16A34A' }]}>Mua lại</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+                );
+              })
+            )}
           </Animated.View>
 
         </ScrollView>

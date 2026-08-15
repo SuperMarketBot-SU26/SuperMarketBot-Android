@@ -31,6 +31,8 @@ export interface RecipeDto {
   alternativeSuggestion?: string;
   matchScore?: number;
   matchReasons?: string[];
+  ingredients?: any[];
+  estimatedTotalCost?: number;
 }
 
 export interface ProductDto {
@@ -98,7 +100,26 @@ export class PersonalizationService {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[PersonalizationService.updateHealthPreferences] Error:', errorText);
-      throw new Error(`Cập nhật sở thích sức khoẻ thất bại (${response.status})`);
+      
+      let errorMessage = `Cập nhật sở thích sức khoẻ thất bại (${response.status})`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.message) {
+          errorMessage = errorJson.message;
+        } else if (errorJson.detail) {
+          errorMessage = errorJson.detail;
+        } else if (errorJson.title) {
+          errorMessage = errorJson.title;
+        } else if (typeof errorJson === 'string') {
+          errorMessage = errorJson;
+        }
+      } catch (e) {
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+      
+      throw new Error(errorMessage);
     }
     return true;
   }

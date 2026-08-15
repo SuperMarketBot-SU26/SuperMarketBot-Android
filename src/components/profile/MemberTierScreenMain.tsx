@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Cake, ChevronLeft, ChevronRight, Clock, Gift, Home, Map, Medal, Percent, ShoppingBag, Sparkles, Truck, User } from 'lucide-react-native';
+import { Bot, Cake, ChevronLeft, ChevronRight, Clock, Gift, Home, Map, Medal, Navigation, Percent, Search, ShoppingBag, Sparkles, Star, Truck, User } from 'lucide-react-native';
 import React, { useState, useCallback } from 'react';
 import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -10,61 +10,32 @@ import { useAuth } from '../../context/AuthContext';
 
 const getTierTheme = (tier: string) => {
   const t = tier ? tier.toLowerCase() : '';
-  if (t.includes('gold') || t.includes('vàng')) {
+  if (t.includes('premium')) {
     return {
       colors: ['#FEF3C7', '#F59E0B'] as const,
-      title: 'Thẻ thành viên Gold',
-      superTitle: 'THÀNH VIÊN VÀNG',
+      title: 'Thẻ thành viên Premium',
+      superTitle: 'THÀNH VIÊN PREMIUM',
       textColor: '#78350F',
       subColor: '#B45309',
     };
   }
-  if (t.includes('platinum') || t.includes('bạch kim')) {
-    return {
-      colors: ['#E0F2FE', '#0284C7'] as const,
-      title: 'Thẻ thành viên Platinum',
-      superTitle: 'THÀNH VIÊN BẠCH KIM',
-      textColor: '#FFFFFF',
-      subColor: '#E0F2FE',
-    };
-  }
-  if (t.includes('silver') || t.includes('bạc')) {
-    return {
-      colors: ['#F1F5F9', '#94A3B8'] as const,
-      title: 'Thẻ thành viên Silver',
-      superTitle: 'THÀNH VIÊN BẠC',
-      textColor: '#1E293B',
-      subColor: '#475569',
-    };
-  }
-  // Bronze / Đồng / default
+  // Medium / default
   return {
-    colors: ['#FFEDD5', '#EA580C'] as const,
-    title: 'Thẻ thành viên Bronze',
-    superTitle: 'THÀNH VIÊN ĐỒNG',
-    textColor: '#78350F',
-    subColor: '#B45309',
+    colors: ['#E0F2FE', '#0284C7'] as const,
+    title: 'Thẻ thành viên Medium',
+    superTitle: 'THÀNH VIÊN MEDIUM',
+    textColor: '#FFFFFF',
+    subColor: '#E0F2FE',
   };
 };
 
-const getProgressDetails = (points: number) => {
-  if (points < 1000) {
+const getProgressDetails = (totalSpent: number) => {
+  const THRESHOLD = 10000000;
+  if (totalSpent < THRESHOLD) {
     return {
-      nextTier: 'Bạc',
-      remaining: 1000 - points,
-      percent: (points / 1000) * 100,
-    };
-  } else if (points < 5000) {
-    return {
-      nextTier: 'Vàng',
-      remaining: 5000 - points,
-      percent: ((points - 1000) / 4000) * 100,
-    };
-  } else if (points < 15000) {
-    return {
-      nextTier: 'Bạch Kim',
-      remaining: 15000 - points,
-      percent: ((points - 5000) / 10000) * 100,
+      nextTier: 'Premium',
+      remaining: THRESHOLD - totalSpent,
+      percent: (totalSpent / THRESHOLD) * 100,
     };
   } else {
     return {
@@ -79,115 +50,73 @@ const isTierActive = (userTier: string, tierName: string) => {
   const ut = userTier ? userTier.toLowerCase() : '';
   const tn = tierName.toLowerCase();
   
-  if (tn === 'đồng' && (ut.includes('bronze') || ut.includes('đồng') || ut === '')) return true;
-  if (tn === 'bạc' && (ut.includes('silver') || ut.includes('bạc'))) return true;
-  if (tn === 'vàng' && (ut.includes('gold') || ut.includes('vàng'))) return true;
-  if (tn === 'bạch kim' && (ut.includes('platinum') || ut.includes('bạch kim'))) return true;
+  if (tn === 'medium' && (ut.includes('medium') || ut === '')) return true;
+  if (tn === 'premium' && ut.includes('premium')) return true;
   
   return false;
 };
 
 const getTierPrivileges = (tier: string) => {
   const t = tier ? tier.toLowerCase() : '';
-  if (t.includes('gold') || t.includes('vàng')) {
-    return [
-      {
-        title: 'Giảm giá 10%',
-        desc: 'Áp dụng cho mọi đơn hàng thực phẩm tươi sống',
-        icon: Percent,
-        iconBg: '#DCFCE7',
-        iconColor: '#059669',
-      },
-      {
-        title: 'Freeship',
-        desc: 'Miễn phí vận chuyển cho đơn hàng từ 200k',
-        icon: Truck,
-        iconBg: '#FFEDD5',
-        iconColor: '#EA580C',
-      },
-      {
-        title: 'Quà tặng sinh nhật',
-        desc: 'Voucher 500k và giỏ trái cây cao cấp',
-        icon: Cake,
-        iconBg: '#F3F4F6',
-        iconColor: '#6B7280',
-      },
-    ];
-  }
-  if (t.includes('platinum') || t.includes('bạch kim')) {
-    return [
-      {
-        title: 'Giảm giá 15%',
-        desc: 'Áp dụng cho toàn bộ hóa đơn mua sắm',
-        icon: Percent,
-        iconBg: '#ECFDF5',
-        iconColor: '#10B981',
-      },
-      {
-        title: 'Freeship trọn đời',
-        desc: 'Miễn phí vận chuyển cho mọi đơn hàng',
-        icon: Truck,
-        iconBg: '#DBEAFE',
-        iconColor: '#2563EB',
-      },
-      {
-        title: 'Quà sinh nhật VIP',
-        desc: 'Voucher 1.000k và hộp quà đặc biệt từ SmartMarket',
-        icon: Cake,
-        iconBg: '#F3E8FF',
-        iconColor: '#9333EA',
-      },
-    ];
-  }
-  if (t.includes('silver') || t.includes('bạc')) {
-    return [
-      {
-        title: 'Giảm giá 5%',
-        desc: 'Áp dụng cho các sản phẩm nhãn hàng riêng',
-        icon: Percent,
-        iconBg: '#F1F5F9',
-        iconColor: '#64748B',
-      },
-      {
-        title: 'Freeship đơn từ 500k',
-        desc: 'Miễn phí vận chuyển cho đơn hàng từ 500k',
-        icon: Truck,
-        iconBg: '#E0F2FE',
-        iconColor: '#0369A1',
-      },
-      {
-        title: 'Quà sinh nhật Bạc',
-        desc: 'Voucher mua sắm trị giá 200k',
-        icon: Cake,
-        iconBg: '#F3F4F6',
-        iconColor: '#6B7280',
-      },
-    ];
-  }
-  // Bronze / Đồng / default
-  return [
+  const mediumPrivileges = [
     {
-      title: 'Giảm giá 2%',
-      desc: 'Áp dụng cho các sản phẩm thiết yếu',
+      title: 'Tương tác với robot',
+      desc: 'Trải nghiệm mua sắm thông minh cùng robot',
+      icon: Bot,
+      iconBg: '#DBEAFE',
+      iconColor: '#2563EB',
+    },
+    {
+      title: 'Tìm kiếm nguyên liệu bằng AI',
+      desc: 'Tìm kiếm nhanh chóng món ăn và nguyên liệu',
+      icon: Search,
+      iconBg: '#F1F5F9',
+      iconColor: '#64748B',
+    },
+    {
+      title: 'Chỉ đường đến các nguyên liệu',
+      desc: 'Robot dẫn đường trực tiếp đến kệ hàng',
+      icon: Navigation,
+      iconBg: '#ECFDF5',
+      iconColor: '#10B981',
+    },
+    {
+      title: 'Sản phẩm khuyến mãi',
+      desc: 'Cập nhật nhanh các sản phẩm đang giảm giá',
       icon: Percent,
       iconBg: '#FFEDD5',
       iconColor: '#EA580C',
     },
-    {
-      title: 'Freeship đơn từ 1M',
-      desc: 'Miễn phí vận chuyển cho đơn từ 1.000.000đ',
-      icon: Truck,
-      iconBg: '#FEF3C7',
-      iconColor: '#D97706',
-    },
-    {
-      title: 'Quà sinh nhật Đồng',
-      desc: 'Voucher mua sắm trị giá 100k',
-      icon: Cake,
-      iconBg: '#F3F4F6',
-      iconColor: '#6B7280',
-    },
   ];
+
+  if (t.includes('premium')) {
+    return [
+      ...mediumPrivileges,
+      {
+        title: 'Cá nhân hóa món ăn',
+        desc: 'Đề xuất món ăn phù hợp ngân sách & sở thích',
+        icon: Sparkles,
+        iconBg: '#FEF3C7',
+        iconColor: '#D97706',
+      },
+      {
+        title: 'Quảng cáo cá nhân hóa',
+        desc: 'Nhận ưu đãi độc quyền dành riêng cho bạn',
+        icon: Star,
+        iconBg: '#FCE7F3',
+        iconColor: '#DB2777',
+      },
+      {
+        title: 'Tìm kiếm cá nhân hoá',
+        desc: 'Lọc kết quả tìm kiếm theo chế độ ăn uống',
+        icon: User,
+        iconBg: '#E0E7FF',
+        iconColor: '#4F46E5',
+      },
+    ];
+  }
+  
+  return mediumPrivileges;
 };
 
 export default function MemberTierScreenMain() {
@@ -247,9 +176,10 @@ export default function MemberTierScreenMain() {
 
           {(() => {
             const theme = getTierTheme(profile?.membershipTier || '');
-            const progress = getProgressDetails(profile?.totalPoints || 0);
+            const progress = getProgressDetails(profile?.totalSpent || 0);
             const privileges = getTierPrivileges(profile?.membershipTier || '');
-            const userTier = profile?.membershipTier || 'Thành viên';
+            const rawTier = profile?.membershipTier || '';
+            const userTier = rawTier.toLowerCase().includes('premium') ? 'Premium' : 'Medium';
             
             return (
               <>
@@ -279,9 +209,9 @@ export default function MemberTierScreenMain() {
                         </Text>
                       </View>
                       <View style={[styles.pointsBox, { backgroundColor: 'rgba(255, 255, 255, 0.9)' }]}>
-                        <Text style={[styles.pointsLabel, { color: theme.textColor, opacity: 0.8 }]}>TOTAL POINTS</Text>
+                        <Text style={[styles.pointsLabel, { color: theme.textColor, opacity: 0.8 }]}>TỔNG CHI TIÊU</Text>
                         <Text style={[styles.pointsValue, { color: theme.textColor === '#FFFFFF' ? '#0284C7' : theme.textColor }]}>
-                          {(profile?.totalPoints || 0).toLocaleString('vi-VN')}
+                          {(profile?.totalSpent || 0).toLocaleString('vi-VN')}đ
                         </Text>
                       </View>
                     </View>
@@ -294,7 +224,7 @@ export default function MemberTierScreenMain() {
                     <Text style={styles.progressTitle}>Tiến trình thăng hạng</Text>
                     <Text style={styles.progressSubtitle}>
                       {progress.remaining > 0 
-                        ? `Còn ${progress.remaining.toLocaleString('vi-VN')} điểm để đạt ${progress.nextTier}` 
+                        ? `Còn ${progress.remaining.toLocaleString('vi-VN')}đ để đạt ${progress.nextTier}` 
                         : 'Bạn đã đạt hạng cao nhất!'}
                     </Text>
                   </View>
@@ -302,7 +232,7 @@ export default function MemberTierScreenMain() {
                   <View style={styles.progressBarContainer}>
                     <View style={styles.progressBarBg} />
                     <LinearGradient
-                      colors={['#F97316', '#3B82F6', '#EAB308', '#22C55E']}
+                      colors={['#0284C7', '#F59E0B']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={[styles.progressBarFill, { width: `${progress.percent}%` }]}
@@ -311,36 +241,17 @@ export default function MemberTierScreenMain() {
 
                   <View style={styles.tierLabels}>
                     <View style={styles.tierLabelItem}>
-                      <View style={[styles.tierDot, { backgroundColor: '#F97316' }]} />
-                      <Text style={isTierActive(userTier, 'đồng') ? styles.tierTextActive : styles.tierText}>Đồng</Text>
+                      <View style={[styles.tierDot, { backgroundColor: '#0284C7' }]} />
+                      <Text style={isTierActive(userTier, 'medium') ? styles.tierTextActive : styles.tierText}>Medium</Text>
                     </View>
                     <View style={styles.tierLabelItem}>
-                      <View style={[styles.tierDot, { backgroundColor: '#3B82F6' }]} />
-                      <Text style={isTierActive(userTier, 'bạc') ? styles.tierTextActive : styles.tierText}>Bạc</Text>
-                    </View>
-                    <View style={styles.tierLabelItem}>
-                      <View style={[styles.tierDot, { backgroundColor: '#EAB308' }]} />
-                      <Text style={isTierActive(userTier, 'vàng') ? styles.tierTextActive : styles.tierText}>Vàng</Text>
-                    </View>
-                    <View style={styles.tierLabelItem}>
-                      <View style={[styles.tierDot, { backgroundColor: '#22C55E', width: 10, height: 10 }]} />
-                      <Text style={isTierActive(userTier, 'bạch kim') ? styles.tierTextActive : styles.tierText}>Bạch Kim</Text>
+                      <View style={[styles.tierDot, { backgroundColor: '#F59E0B' }]} />
+                      <Text style={isTierActive(userTier, 'premium') ? styles.tierTextActive : styles.tierText}>Premium</Text>
                     </View>
                   </View>
                 </Animated.View>
 
-                {/* Action Buttons */}
-                <Animated.View entering={FadeInDown.delay(300)} style={styles.actionsRow}>
-                  <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]}>
-                    <Gift color="white" size={20} />
-                    <Text style={styles.actionBtnPrimaryText}>Đổi thưởng</Text>
-                  </TouchableOpacity>
 
-                  <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSecondary]}>
-                    <Clock color="#4B5563" size={20} />
-                    <Text style={styles.actionBtnSecondaryText}>Lịch sử tích điểm</Text>
-                  </TouchableOpacity>
-                </Animated.View>
 
                 {/* Privileges Section */}
                 <Animated.View entering={FadeInDown.delay(400)} style={styles.privilegesSection}>
@@ -366,27 +277,6 @@ export default function MemberTierScreenMain() {
             );
           })()}
 
-          {/* AI Banner */}
-          <Animated.View entering={FadeInUp.delay(500)} style={styles.bannerContainer}>
-            <ImageBackground
-              source={{ uri: 'https://res.cloudinary.com/db3ed4buc/image/upload/v1779358193513/fresh_veggies_banner.png' }} // Replace with appropriate banner image if available
-              style={styles.bannerBg}
-              imageStyle={{ borderRadius: 20 }}
-            >
-              <LinearGradient
-                colors={['rgba(0,0,0,0.1)', 'rgba(0,100,0,0.8)']}
-                style={styles.bannerGradient}
-              >
-                <Text style={styles.bannerSuperTitle}>ƯU ĐÃI RIÊNG CHO BẠN</Text>
-                <Text style={styles.bannerTitle}>AI đề xuất giỏ quà sức khỏe giảm 30%</Text>
-              </LinearGradient>
-            </ImageBackground>
-
-            <TouchableOpacity style={styles.floatingBannerBtn}>
-              <Sparkles color="#059669" size={24} />
-            </TouchableOpacity>
-          </Animated.View>
-
         </ScrollView>
 
         {/* Bottom Navigation */}
@@ -397,7 +287,7 @@ export default function MemberTierScreenMain() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.navItem}>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/map')}>
             <View style={styles.navTabBox}>
               <Map color="#9CA3AF" size={24} />
             </View>
@@ -542,18 +432,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 16,
   },
   progressTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#374151',
+    marginBottom: 4,
   },
   progressSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: '#059669',
   },
@@ -667,18 +555,21 @@ const styles = StyleSheet.create({
   },
   privilegeTextContainer: {
     flex: 1,
+    flexShrink: 1,
     paddingRight: 16,
   },
   privilegeTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 4,
+    marginBottom: 6,
+    flexWrap: 'wrap',
   },
   privilegeDesc: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#6B7280',
-    lineHeight: 18,
+    lineHeight: 20,
+    flexWrap: 'wrap',
   },
   bannerContainer: {
     position: 'relative',

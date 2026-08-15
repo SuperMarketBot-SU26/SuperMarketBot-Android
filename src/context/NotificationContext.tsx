@@ -46,6 +46,9 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
         connection = new signalR.HubConnectionBuilder()
           .withUrl(`${BASE_URL}/hubs/member`, {
             accessTokenFactory: () => Promise.resolve(token),
+            headers: { 'ngrok-skip-browser-warning': 'true' },
+            skipNegotiation: true,
+            transport: signalR.HttpTransportType.WebSockets
           })
           .configureLogging(signalR.LogLevel.None)
           .withAutomaticReconnect()

@@ -315,9 +315,6 @@ export default function CartScreenMain() {
               />
               <Text style={styles.headerTitle}>Giỏ hàng của bạn</Text>
             </View>
-            <TouchableOpacity style={styles.bellBtn} onPress={() => router.push('/notifications')}>
-              <Bell color="#059669" size={20} />
-            </TouchableOpacity>
           </View>
 
           {loading ? (

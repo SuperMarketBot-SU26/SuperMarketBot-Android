@@ -24,6 +24,20 @@ export interface SearchResponseDto {
   aiExplanation: string | null;
 }
 
+export interface IngredientRecommendationDto {
+  productId: number;
+  productName: string;
+  reason: string;
+  imageUrl: string;
+  unitPrice: number;
+  quantity: number;
+  quantityText: string;
+}
+
+export interface RecommendIngredientsResponseDto {
+  ingredients: IngredientRecommendationDto[];
+}
+
 export class SearchService {
   static async searchAll(params: {
     q: string;
@@ -94,6 +108,30 @@ export class SearchService {
       return JSON.parse(rawText) as SearchResponseDto;
     } catch (e) {
       throw new Error('Phản hồi từ server không hợp lệ');
+    }
+  }
+
+  static async recommendIngredients(dishName: string): Promise<RecommendIngredientsResponseDto> {
+    try {
+      const url = `${BASE_URL}/api/search/recommend-ingredients`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify({ dishName }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[SearchService] Error recommending ingredients:', error);
+      return { ingredients: [] };
     }
   }
 }

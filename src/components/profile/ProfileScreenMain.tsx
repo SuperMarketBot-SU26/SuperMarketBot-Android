@@ -10,40 +10,22 @@ import { useAuth } from '../../context/AuthContext';
 
 const getTierTheme = (tier: string) => {
   const t = tier ? tier.toLowerCase() : '';
-  if (t.includes('gold') || t.includes('vàng')) {
+  if (t.includes('premium')) {
     return {
       colors: ['#FEF3C7', '#F59E0B'] as const,
-      title: 'Thẻ thành viên Gold',
-      superTitle: 'THÀNH VIÊN VÀNG',
+      title: 'Thẻ thành viên Premium',
+      superTitle: 'THÀNH VIÊN PREMIUM',
       textColor: '#78350F',
       subColor: '#B45309',
     };
   }
-  if (t.includes('platinum') || t.includes('bạch kim')) {
-    return {
-      colors: ['#E0F2FE', '#0284C7'] as const,
-      title: 'Thẻ thành viên Platinum',
-      superTitle: 'THÀNH VIÊN BẠCH KIM',
-      textColor: '#FFFFFF',
-      subColor: '#E0F2FE',
-    };
-  }
-  if (t.includes('silver') || t.includes('bạc')) {
-    return {
-      colors: ['#F1F5F9', '#94A3B8'] as const,
-      title: 'Thẻ thành viên Silver',
-      superTitle: 'THÀNH VIÊN BẠC',
-      textColor: '#1E293B',
-      subColor: '#475569',
-    };
-  }
-  // Bronze / Đồng / default
+  // Medium / default
   return {
-    colors: ['#FFEDD5', '#EA580C'] as const,
-    title: 'Thẻ thành viên Bronze',
-    superTitle: 'THÀNH VIÊN ĐỒNG',
-    textColor: '#78350F',
-    subColor: '#B45309',
+    colors: ['#E0F2FE', '#0284C7'] as const,
+    title: 'Thẻ thành viên Medium',
+    superTitle: 'THÀNH VIÊN MEDIUM',
+    textColor: '#FFFFFF',
+    subColor: '#E0F2FE',
   };
 };
 
@@ -134,10 +116,10 @@ export default function ProfileScreenMain() {
 
                   <View style={styles.cardPointsRow}>
                     <View>
-                      <Text style={[styles.pointsLabel, { color: theme.textColor, opacity: 0.7 }]}>Điểm tích lũy hiện tại</Text>
+                      <Text style={[styles.pointsLabel, { color: theme.textColor, opacity: 0.7 }]}>Tổng chi tiêu</Text>
                       <Text style={[styles.pointsValue, { color: theme.textColor }]}>
-                        {profile?.totalPoints !== undefined ? profile.totalPoints.toLocaleString('vi-VN') : '0'}{' '}
-                        <Text style={[styles.pointsUnit, { color: theme.textColor }]}>điểm</Text>
+                        {profile?.totalSpent !== undefined ? profile.totalSpent.toLocaleString('vi-VN') : '0'}{' '}
+                        <Text style={[styles.pointsUnit, { color: theme.textColor }]}>đ</Text>
                       </Text>
                     </View>
                   </View>
@@ -168,12 +150,21 @@ export default function ProfileScreenMain() {
               <ChevronRightIcon />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/shopping-preferences')}>
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => {
+                if (profile?.membershipTier?.toLowerCase() !== 'premium') {
+                  alert('Tính năng này chỉ dành cho thành viên Premium (chi tiêu trên 10,000,000đ)');
+                } else {
+                  router.push('/shopping-preferences');
+                }
+              }}
+            >
               <View style={styles.menuIconBox}>
                 <SlidersHorizontal color="#4B5563" size={20} />
               </View>
               <View style={styles.menuTextContainer}>
-                <Text style={styles.menuItemTitle}>Tùy chọn mua sắm</Text>
+                <Text style={styles.menuItemTitle}>Thiết lập cá nhân hoá</Text>
                 <Text style={styles.menuItemSub}>Chỉnh sửa sở thích & ngân sách</Text>
               </View>
               <ChevronRightIcon />
@@ -202,47 +193,7 @@ export default function ProfileScreenMain() {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Points History */}
-          <Animated.View entering={FadeInDown.delay(400)} style={styles.menuSection}>
-            <Text style={styles.sectionTitle}>Lịch sử tích điểm</Text>
 
-            <View style={styles.historyCard}>
-              <View style={styles.historyItem}>
-                <View style={styles.historyIconBox}>
-                  <ShoppingBag color="#6B7280" size={18} />
-                </View>
-                <View style={styles.historyTextContainer}>
-                  <Text style={styles.historyTitle}>Mua sắm rau củ tươi</Text>
-                  <Text style={styles.historyTime}>Hôm nay, 08:45</Text>
-                </View>
-                <Text style={styles.historyPoints}>+120</Text>
-              </View>
-              <View style={styles.historyDivider} />
-
-              <View style={styles.historyItem}>
-                <View style={styles.historyIconBox}>
-                  <Leaf color="#6B7280" size={18} />
-                </View>
-                <View style={styles.historyTextContainer}>
-                  <Text style={styles.historyTitle}>Tái chế túi nhựa</Text>
-                  <Text style={styles.historyTime}>12 Th04, 15:20</Text>
-                </View>
-                <Text style={styles.historyPoints}>+50</Text>
-              </View>
-              <View style={styles.historyDivider} />
-
-              <View style={styles.historyItem}>
-                <View style={styles.historyIconBox}>
-                  <PartyPopper color="#6B7280" size={18} />
-                </View>
-                <View style={styles.historyTextContainer}>
-                  <Text style={styles.historyTitle}>Thưởng thăng hạng Vàng</Text>
-                  <Text style={styles.historyTime}>10 Th04, 10:00</Text>
-                </View>
-                <Text style={styles.historyPoints}>+500</Text>
-              </View>
-            </View>
-          </Animated.View>
 
           {/* Logout Button */}
           <Animated.View entering={FadeInUp.delay(500)} style={styles.logoutSection}>
@@ -262,7 +213,7 @@ export default function ProfileScreenMain() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.navItem}>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/map')}>
             <View style={styles.navTabBox}>
               <Map color="#9CA3AF" size={24} />
             </View>

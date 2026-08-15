@@ -255,6 +255,19 @@ export default function PersonalInfoScreenMain() {
                 </>
               )}
 
+              {/* Order History Button */}
+              <TouchableOpacity style={styles.inputContainer} onPress={() => router.push('/order-history')}>
+                <View style={[styles.iconBox, { backgroundColor: '#F0FDF4' }]}>
+                  <ShoppingBag color="#059669" size={20} />
+                </View>
+                <View style={styles.inputContent}>
+                  <Text style={[styles.inputValue, { color: '#059669' }]}>Lịch sử đơn hàng</Text>
+                </View>
+                <View style={styles.editBtn}>
+                  <ChevronLeft color="#059669" size={18} style={{ transform: [{ rotate: '180deg' }] }} />
+                </View>
+              </TouchableOpacity>
+
               {/* Change Password Button */}
               <TouchableOpacity style={styles.inputContainer} onPress={handleChangePasswordRequest}>
                 <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
@@ -328,7 +341,7 @@ export default function PersonalInfoScreenMain() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.navItem}>
+            <TouchableOpacity style={styles.navItem} onPress={() => router.push('/map')}>
               <View style={styles.navTabBox}>
                 <Map color="#9CA3AF" size={24} />
               </View>

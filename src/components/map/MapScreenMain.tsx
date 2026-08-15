@@ -4,11 +4,13 @@ import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Anima
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, CheckCircle2, Home, Bot, Compass, Star, MapPin, Maximize2, X, Navigation } from 'lucide-react-native';
-import Svg, { Polyline, Line, G, Path, Polygon, Circle, Rect, Text as SvgText, Defs, LinearGradient as SvgLinearGradient, Stop, Ellipse } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
+import { WebView } from 'react-native-webview';
+import Svg, { Circle, G, Text as SvgText, Path, Rect, Line, Polygon, Polyline, Defs, LinearGradient as SvgLinearGradient, Stop, Ellipse } from 'react-native-svg';
 import { MapService, MapData, SemanticObject, RoutePoint, MapNode } from '../../services/MapService';
 import { useRobotNavigation } from '../../context/RobotNavigationContext';
 import { NavigationService } from '../../services/NavigationService';
+import { MAP_HTML } from './MapHtml';
 
 const formatPrice = (price: number) => {
   return price ? price.toLocaleString('vi-VN') + ' VNĐ' : '0 VNĐ';

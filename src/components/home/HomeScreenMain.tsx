@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X } from 'lucide-react-native';
+import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X, ShoppingCart, Sparkles } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Animated as RNAnimated, Modal, Alert, Platform, PermissionsAndroid } from 'react-native';
 import { Image } from 'expo-image';
@@ -14,6 +14,7 @@ import { ProfileService, ProfileDto } from '../../services/ProfileService';
 import { CartService } from '../../services/CartService';
 import { PersonalizationService, RecipeDto } from '../../services/PersonalizationService';
 import { MealSuggestionService, MenuAssistantResponseDto } from '../../services/MealSuggestionService';
+import { SearchService } from '../../services/SearchService';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import { MemberAdService, SponsoredRecommendationDto } from '../../services/MemberAdService';
@@ -155,6 +156,7 @@ export default function HomeScreenMain() {
   const [sponsoredAds, setSponsoredAds] = useState<SponsoredRecommendationDto[]>([]);
   const [systemDeals, setSystemDeals] = useState<any[]>([]);
   const [loadingAds, setLoadingAds] = useState(true);
+  const [cartTotal, setCartTotal] = useState(0);
 
   const [isListening, setIsListening] = useState(false);
   const [voiceText, setVoiceText] = useState('');
@@ -292,17 +294,50 @@ export default function HomeScreenMain() {
     }
   };
 
-  const openRecipeAssistant = (recipe: RecipeDto) => {
+  const openRecipeAssistant = (recipe: any) => {
     setSelectedRecipe(recipe);
     setPortions(recipe.yieldPortions || 2);
     setRecipeModalVisible(true);
-    loadMenuAssistant(recipe.recipeId, recipe.yieldPortions || 2);
+    loadMenuAssistant(recipe.recipeId, recipe.yieldPortions || 2, recipe.recipeName, recipe);
   };
 
-  const loadMenuAssistant = async (recipeId: number, portionsCount: number) => {
+  const loadMenuAssistant = async (recipeId: number, portionsCount: number, fallbackRecipeName?: string, currentRecipe?: any) => {
     try {
       setLoadingAssistant(true);
       const data = await MealSuggestionService.getMenuAssistant(recipeId, portionsCount);
+      
+      // Nếu không có nguyên liệu, ưu tiên dùng nguyên liệu đã được AI sinh từ trước
+      if (!data.ingredients || data.ingredients.length === 0) {
+        const recipeToUse = currentRecipe || selectedRecipe;
+        if (recipeToUse && recipeToUse.ingredients && recipeToUse.ingredients.length > 0) {
+          const basePortions = recipeToUse.yieldPortions || 2;
+          data.ingredients = recipeToUse.ingredients.map((ing: any) => ({
+            ...ing,
+            quantityRequired: (ing.quantityRequired / basePortions) * portionsCount
+          }));
+          data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
+        } else {
+          // Fallback gọi AI (chỉ khi thực sự chưa có nguyên liệu)
+          const rName = fallbackRecipeName || recipeToUse?.recipeName;
+          if (rName) {
+             const aiData = await SearchService.recommendIngredients(rName);
+             if (aiData && aiData.ingredients && aiData.ingredients.length > 0) {
+               data.ingredients = aiData.ingredients.map((ing: any) => ({
+                  productId: ing.productId,
+                  productName: ing.productName,
+                  unitPrice: ing.unitPrice,
+                  imageUrl: ing.imageUrl,
+                  quantityRequired: ing.quantity * (portionsCount / (recipeToUse?.yieldPortions || 2)),
+                  unitOfMeasure: ing.quantityText || 'phần',
+                  inStock: true,
+                  currentStock: 10
+               }));
+               data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
+             }
+          }
+        }
+      }
+
       setAssistantData(data);
     } catch (e) {
       console.error('Error fetching recipe assistant details:', e);
@@ -316,7 +351,7 @@ export default function HomeScreenMain() {
     if (!selectedRecipe) return;
     const newPortions = Math.max(1, Math.min(20, portions + delta));
     setPortions(newPortions);
-    loadMenuAssistant(selectedRecipe.recipeId, newPortions);
+    loadMenuAssistant(selectedRecipe.recipeId, newPortions, selectedRecipe.recipeName);
   };
 
   const handleAddAllIngredientsToCart = async () => {
@@ -375,8 +410,18 @@ export default function HomeScreenMain() {
       refreshProfile();
       fetchProducts();
       fetchSponsoredAds();
+      fetchCartTotal();
     }
   }, [isFocused, searchMode]);
+
+  const fetchCartTotal = async () => {
+    try {
+      const cart = await CartService.getCart();
+      setCartTotal(cart.totalPrice || 0);
+    } catch (e) {
+      console.warn('Error fetching cart total:', e);
+    }
+  };
 
   const checkConnectedRobot = async () => {
     try {
@@ -444,14 +489,71 @@ export default function HomeScreenMain() {
   };
 
   const fetchMeals = async () => {
+    if (userTier !== 'PREMIUM') {
+      setLoadingMeals(false);
+      return;
+    }
     try {
       setLoadingMeals(true);
       const data = await PersonalizationService.getPersonalizedMeals();
-      setMeals(data);
+      
+      const mealsWithIngredients = await Promise.all(
+        data.map(async (meal: any) => {
+          try {
+            const assistantData = await MealSuggestionService.getMenuAssistant(meal.recipeId, meal.yieldPortions || 2);
+            let finalIngredients = assistantData.ingredients || [];
+            let estCost = assistantData.estimatedTotalCost || 0;
+
+            if (finalIngredients.length === 0) {
+              const aiData = await SearchService.recommendIngredients(meal.recipeName);
+              if (aiData && aiData.ingredients && aiData.ingredients.length > 0) {
+                finalIngredients = aiData.ingredients.map((ing: any) => ({
+                  productId: ing.productId,
+                  productName: ing.productName,
+                  unitPrice: ing.unitPrice,
+                  imageUrl: ing.imageUrl,
+                  quantityRequired: ing.quantity,
+                  unitOfMeasure: ing.quantityText || 'phần',
+                  inStock: true,
+                  currentStock: 10
+                }));
+                estCost = finalIngredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
+              }
+            }
+            return { ...meal, ingredients: finalIngredients, estimatedTotalCost: estCost };
+          } catch (e) {
+            return { ...meal, ingredients: [] };
+          }
+        })
+      );
+      setMeals(mealsWithIngredients);
     } catch (error) {
       console.error('Error fetching meals:', error);
     } finally {
       setLoadingMeals(false);
+    }
+  };
+
+  const handleAddMealToCart = async (meal: any) => {
+    if (!meal.ingredients || meal.ingredients.length === 0) {
+      ToastAndroid.show('Đang tải nguyên liệu hoặc không có nguyên liệu', ToastAndroid.SHORT);
+      return;
+    }
+    const inStockItems = meal.ingredients.filter((ing: any) => ing.inStock);
+    if (inStockItems.length === 0) {
+      ToastAndroid.show('Nguyên liệu đã hết hàng', ToastAndroid.SHORT);
+      return;
+    }
+    
+    try {
+      setAddingToCart(true);
+      await Promise.all(inStockItems.map((item: any) => CartService.addItem(item.productId, Math.ceil(item.quantityRequired))));
+      ToastAndroid.show(`Đã thêm ${inStockItems.length} nguyên liệu vào giỏ hàng`, ToastAndroid.SHORT);
+      fetchCartTotal();
+    } catch (e: any) {
+      ToastAndroid.show('Có lỗi xảy ra khi thêm vào giỏ hàng', ToastAndroid.SHORT);
+    } finally {
+      setAddingToCart(false);
     }
   };
 
@@ -461,22 +563,28 @@ export default function HomeScreenMain() {
     }
   }, [isFocused]);
 
+  const spendingLimit = profile?.spendingLimit || 0;
+  const budgetPercentage = spendingLimit > 0 ? Math.min((cartTotal / spendingLimit) * 100, 100) : 0;
+  const gaugeDashoffset = 251 - (251 * budgetPercentage) / 100;
+  const isOverBudget = spendingLimit > 0 && cartTotal > spendingLimit;
+  const remainingBudget = Math.max(spendingLimit - cartTotal, 0);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.userInfo} onPress={() => router.push('/profile')}>
+          <TouchableOpacity style={[styles.userInfo, { flex: 1, paddingRight: 12 }]} onPress={() => router.push('/profile')}>
             <View style={styles.avatarContainer}>
               <Image source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }} style={styles.avatar} />
               <View style={[styles.badge, { backgroundColor: tierTheme.badgeBg }]}>
                 <Text style={styles.badgeText}>{tierTheme.badgeText}</Text>
               </View>
             </View>
-            <View style={styles.greetingContainer}>
-              <Text style={styles.greetingText}>Chào {profile?.fullName ? profile.fullName.split(' ').pop() : 'bạn'}!</Text>
-              <Text style={styles.subGreetingText}>{getGreetingText()}</Text>
+            <View style={[styles.greetingContainer, { flex: 1 }]}>
+              <Text style={styles.greetingText} numberOfLines={1}>Chào {profile?.fullName ? profile.fullName.split(' ').pop() : 'bạn'}!</Text>
+              <Text style={styles.subGreetingText} numberOfLines={1}>{getGreetingText()}</Text>
             </View>
           </TouchableOpacity>
           <View style={styles.headerActions}>
@@ -536,11 +644,19 @@ export default function HomeScreenMain() {
             <TouchableOpacity style={styles.actionIcon} onPress={startListening}>
               <Mic color="#059669" size={20} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionIcon}>
-              <Camera color="#059669" size={20} />
-            </TouchableOpacity>
+
           </View>
         </Animated.View>
+
+        {/* Personalization Notification Banner */}
+        {searchMode === 'personal' && (
+          <Animated.View entering={FadeInDown.delay(350)} style={{ backgroundColor: '#ECFDF5', padding: 12, marginHorizontal: 20, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+            <Sparkles color="#059669" size={18} style={{ marginRight: 8 }} />
+            <Text style={{ color: '#065F46', fontSize: 12, flex: 1, fontWeight: '500' }}>
+              ✨ AI đã tự động loại bỏ các nguyên liệu bạn dị ứng và gợi ý theo đúng ngân sách, chế độ ăn của bạn!
+            </Text>
+          </Animated.View>
+        )}
 
         {/* Smart Utilities */}
         <Animated.View entering={FadeInRight.delay(400)}>
@@ -549,7 +665,15 @@ export default function HomeScreenMain() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
             {/* Personalized Meals */}
-            {loadingMeals ? (
+            {userTier !== 'PREMIUM' ? (
+              <View style={[styles.smartCard, { width: width * 0.85, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }]}>
+                <Sparkles color="#9CA3AF" size={32} style={{ marginBottom: 12 }} />
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#4B5563', marginBottom: 8 }}>Tính năng khóa</Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
+                  Tiện ích cá nhân hóa đề xuất món ăn và nguyên liệu bằng AI chỉ dành cho thành viên Premium (chi tiêu trên 10,000,000đ).
+                </Text>
+              </View>
+            ) : loadingMeals ? (
               <View style={[styles.smartCard, { justifyContent: 'center', alignItems: 'center' }]}>
                 <ActivityIndicator size="small" color="#059669" />
               </View>
@@ -572,12 +696,36 @@ export default function HomeScreenMain() {
                     <Text style={styles.smartCardDesc} numberOfLines={1}>
                       {fixMojibake(meal.matchReasons?.[0]) || `K.Phần: ${meal.yieldPortions} người • ${meal.calories ? meal.calories + ' kcal' : 'Ngon miệng'}`}
                     </Text>
+                    {meal.ingredients && meal.ingredients.length > 0 && (
+                      <View style={{ marginBottom: 12 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 }}>Nguyên liệu cần có:</Text>
+                        <Text style={{ fontSize: 11, color: '#6B7280' }} numberOfLines={2}>
+                          {meal.ingredients.map((ing: any) => ing.productName).join(', ')}
+                        </Text>
+                        {meal.estimatedTotalCost && (
+                          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#059669', marginTop: 4 }}>
+                            Dự tính: {meal.estimatedTotalCost.toLocaleString('vi-VN')} đ
+                          </Text>
+                        )}
+                      </View>
+                    )}
                     <View style={styles.smartCardActions}>
-                      <TouchableOpacity style={styles.btnPrimary} onPress={() => openRecipeAssistant(meal)}>
-                        <Text style={styles.btnPrimaryText}>Nấu ngay</Text>
+                      <TouchableOpacity style={[styles.btnSecondary, { flex: 1, alignItems: 'center', paddingHorizontal: 4 }]} onPress={() => openRecipeAssistant(meal)}>
+                        <Text style={[styles.btnSecondaryText, { fontSize: 11 }]} numberOfLines={1}>Xem trước</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.btnSecondary} onPress={() => openRecipeAssistant(meal)}>
-                        <Text style={styles.btnSecondaryText}>Chi tiết</Text>
+                      <TouchableOpacity 
+                        style={[styles.btnPrimary, { flex: 1, flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 4 }, addingToCart && { opacity: 0.7 }]} 
+                        onPress={() => handleAddMealToCart(meal)}
+                        disabled={addingToCart}
+                      >
+                        {addingToCart ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <>
+                            <ShoppingCart color="white" size={12} style={{ marginRight: 2 }} />
+                            <Text style={[styles.btnPrimaryText, { fontSize: 11, flexShrink: 1 }]} numberOfLines={1}>Thêm vào giỏ</Text>
+                          </>
+                        )}
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -623,11 +771,11 @@ export default function HomeScreenMain() {
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.budgetValue}>
-                {profile?.spendingLimit ? `0đ / ${(profile.spendingLimit / 1000000).toFixed(1)}tr vnđ` : 'Chưa thiết lập'}
+                {spendingLimit > 0 ? `${cartTotal.toLocaleString('vi-VN')}đ / ${(spendingLimit / 1000000).toFixed(1)}tr vnđ` : 'Chưa thiết lập'}
               </Text>
-              <View style={[styles.budgetStatusBadge, !profile?.spendingLimit && { backgroundColor: '#F3F4F6' }]}>
-                <Text style={[styles.budgetStatusText, !profile?.spendingLimit && { color: '#6B7280' }]}>
-                  {profile?.spendingLimit ? 'Vẫn trong ngân sách' : 'Thiết lập ngay'}
+              <View style={[styles.budgetStatusBadge, !spendingLimit && { backgroundColor: '#F3F4F6' }, isOverBudget && { backgroundColor: '#FEE2E2' }]}>
+                <Text style={[styles.budgetStatusText, !spendingLimit && { color: '#6B7280' }, isOverBudget && { color: '#DC2626' }]}>
+                  {spendingLimit > 0 ? (isOverBudget ? 'Vượt ngân sách' : 'Vẫn trong ngân sách') : 'Thiết lập ngay'}
                 </Text>
               </View>
             </View>
@@ -648,30 +796,30 @@ export default function HomeScreenMain() {
                   strokeDasharray="251 251"
                   strokeDashoffset="0"
                 />
-                {/* Foreground arc (0%) */}
+                {/* Foreground arc (Dynamic) */}
                 <Circle
                   cx="100"
                   cy="100"
                   r="80"
                   fill="none"
-                  stroke="#059669"
+                  stroke={isOverBudget ? "#DC2626" : "#059669"}
                   strokeWidth="14"
                   strokeLinecap="round"
                   strokeDasharray="251 251"
-                  strokeDashoffset="251"
+                  strokeDashoffset={spendingLimit > 0 ? gaugeDashoffset : 251}
                 />
               </Svg>
               <View style={styles.budgetGaugeTextContainer}>
-                <Text style={styles.budgetGaugeSpent}>0đ</Text>
+                <Text style={[styles.budgetGaugeSpent, isOverBudget && { color: '#DC2626' }]}>{cartTotal.toLocaleString('vi-VN')}đ</Text>
                 <Text style={styles.budgetGaugeLabel}>Đã chi tiêu</Text>
               </View>
             </View>
             <View style={styles.budgetGaugeDetails}>
               <Text style={styles.budgetGaugeDetailText}>
-                Ngân sách: <Text style={{ fontWeight: '700', color: '#111827' }}>{profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa đặt'}</Text>
+                Ngân sách: <Text style={{ fontWeight: '700', color: '#111827' }}>{spendingLimit > 0 ? spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa đặt'}</Text>
               </Text>
-              <Text style={[styles.budgetGaugeDetailText, { color: '#059669', fontWeight: 'bold' }]}>
-                Còn lại: {profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : '0đ'}
+              <Text style={[styles.budgetGaugeDetailText, { color: isOverBudget ? '#DC2626' : '#059669', fontWeight: 'bold' }]}>
+                Còn lại: {spendingLimit > 0 ? remainingBudget.toLocaleString('vi-VN') + 'đ' : '0đ'}
               </Text>
             </View>
           </View>
@@ -834,7 +982,7 @@ export default function HomeScreenMain() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/robots')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/map')}>
           <View style={[styles.navTabBox, activeTab === 'route' && styles.navTabBoxActive]}>
             <Map color={activeTab === 'route' ? 'white' : '#9CA3AF'} size={24} />
           </View>
@@ -927,10 +1075,10 @@ export default function HomeScreenMain() {
                 <Text style={styles.recipeLoadingText}>Đang tính toán nguyên liệu tối ưu...</Text>
               </View>
             ) : (
-              <View style={{ flex: 1, width: '100%' }}>
+              <View style={{ flexShrink: 1, width: '100%' }}>
                 {/* Ingredients list */}
                 <Text style={styles.ingredientsSectionTitle}>Danh sách nguyên liệu cần thiết</Text>
-                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
                   {assistantData?.ingredients && assistantData.ingredients.length > 0 ? (
                     assistantData.ingredients.map((ing, idx) => (
                       <View key={`ing-${ing.productId}-${idx}`} style={styles.ingredientRowCard}>

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * RobotNavigationContext.tsx
  *
  * Global state cho ch?c nang Ði?u Hu?ng Robot (Asynchronous Dispatch).
@@ -158,6 +158,9 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
       connection = new signalR.HubConnectionBuilder()
         .withUrl(`${BASE_URL}/hubs/robot`, {
           accessTokenFactory: () => Promise.resolve(token),
+          headers: { 'ngrok-skip-browser-warning': 'true' },
+          skipNegotiation: true,
+          transport: signalR.HttpTransportType.WebSockets
         })
         .configureLogging(signalR.LogLevel.Warning)
         .withAutomaticReconnect([0, 2000, 5000, 10000])

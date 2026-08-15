@@ -1,5 +1,5 @@
 const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
-export const BASE_URL = (ENV_API_URL?.replace(/\/$/, '')) || 'https://interiorly-pinnatisect-adalyn.ngrok-free.dev';
+export const BASE_URL = 'https://interiorly-pinnatisect-adalyn.ngrok-free.dev';
 
 console.log('[AuthService] EXPO_PUBLIC_API_URL env =', ENV_API_URL);
 console.log('[AuthService] BASE_URL =', BASE_URL);

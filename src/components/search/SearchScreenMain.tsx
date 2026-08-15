@@ -66,13 +66,18 @@ export default function SearchScreenMain() {
           if (isPersonal) {
             // Nếu kết quả tìm kiếm cá nhân hóa = 0 (do bị lọc dị ứng/tránh), 
             // tìm sản phẩm gốc và gọi API alternatives để lấy đúng các sản phẩm thay thế an toàn
-            if ((!searchResults.results || searchResults.results.length === 0) && searchQuery) {
+            if (searchQuery) {
               const rawAll = await SearchService.searchAll({ q: searchQuery as string });
-              if (rawAll.results && rawAll.results.length > 0) {
-                const targetProduct = rawAll.results[0];
-                setRestrictedInfo({ isRestricted: true, productName: targetProduct.productName });
-                console.log(`[SearchScreenMain] Sản phẩm gốc #${targetProduct.productId} (${targetProduct.productName}) bị dị ứng. Đang lấy sản phẩm thay thế...`);
-                products = await ProductService.getAlternatives(targetProduct.productId, auth?.profile?.memberId);
+              if ((!searchResults.results || searchResults.results.length === 0)) {
+                if (rawAll.results && rawAll.results.length > 0) {
+                  const targetProduct = rawAll.results[0];
+                  setRestrictedInfo({ isRestricted: true, productName: targetProduct.productName });
+                  console.log(`[SearchScreenMain] Sản phẩm gốc #${targetProduct.productId} (${targetProduct.productName}) bị dị ứng. Đang lấy sản phẩm thay thế...`);
+                  products = await ProductService.getAlternatives(targetProduct.productId, auth?.profile?.memberId);
+                }
+              } else if (rawAll.results && rawAll.results.length > searchResults.results.length) {
+                // Có sản phẩm bị lọc nhưng vẫn có kết quả trả về
+                setRestrictedInfo({ isRestricted: true, productName: 'Một số sản phẩm' });
               }
             }
 
@@ -217,7 +222,15 @@ export default function SearchScreenMain() {
                   <Text style={styles.allergyTitle}>Cảnh báo dị ứng & Chế độ ăn</Text>
                 </View>
                 <Text style={styles.allergyText}>
-                  Sản phẩm <Text style={styles.allergyBold}>"{restrictedInfo.productName}"</Text> chứa thành phần dị ứng hoặc không phù hợp với chế độ ăn của bạn. Hệ thống đã tự động lọc ẩn sản phẩm này để bảo vệ sức khỏe cho bạn.
+                  {restrictedInfo.productName === 'Một số sản phẩm' ? (
+                    <>
+                      <Text style={styles.allergyBold}>Một số sản phẩm</Text> đã bị ẩn vì chứa thành phần dị ứng hoặc không phù hợp với chế độ ăn của bạn. Bạn có thể chuyển sang "Tìm tất cả" để xem toàn bộ.
+                    </>
+                  ) : (
+                    <>
+                      Sản phẩm <Text style={styles.allergyBold}>"{restrictedInfo.productName}"</Text> chứa thành phần dị ứng hoặc không phù hợp với chế độ ăn của bạn. Hệ thống đã tự động lọc ẩn sản phẩm này để bảo vệ sức khỏe cho bạn.
+                    </>
+                  )}
                 </Text>
               </Animated.View>
             ) : (
