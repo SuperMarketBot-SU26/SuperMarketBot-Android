@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Bell, Home, Map, Minus, Plus, ShoppingBag, Trash2, User, Zap, AlertTriangle, AlertCircle } from 'lucide-react-native';
 import React, { useCallback, useState, useEffect } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
@@ -16,7 +16,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useIsFocused } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import * as signalR from '@microsoft/signalr';
 import { CartService, CartDto, CartItemDto } from '../../services/CartService';
@@ -186,7 +185,6 @@ function SwipeableCartItem({
 export default function CartScreenMain() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const isFocused = useIsFocused();
   
   const [profile, setProfile] = useState<ProfileDto | null>(null);
   const [cart, setCart] = useState<CartDto | null>(null);
@@ -214,11 +212,11 @@ export default function CartScreenMain() {
   };
 
   // Lắng nghe SignalR Hub để đồng bộ Real-time
-  useEffect(() => {
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
       fetchProfileAndCart();
-    }
-  }, [isFocused]);
+    }, [])
+  );
 
   useEffect(() => {
     if (hubConnection) {

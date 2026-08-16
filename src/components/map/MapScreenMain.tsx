@@ -757,7 +757,7 @@ export default function MapScreenMain() {
 
     return (
       <View style={{ width: widthCanvas, height: mapH, backgroundColor: '#F8FAFC', borderRadius: 20, overflow: 'hidden' }}>
-        <Svg height="100%" width="100%" style={StyleSheet.absoluteFillObject}>
+        <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
           <Defs>
             <SvgLinearGradient id="woodLight" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor="#92400E" stopOpacity="1" />

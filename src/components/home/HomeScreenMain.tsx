@@ -1,13 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X, ShoppingCart, Sparkles, Lock } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Animated as RNAnimated, Modal, Alert, Platform, PermissionsAndroid } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, FadeInRight, FadeInUp, SharedTransition, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProductService, ProductDto } from '../../services/ProductService';
-import { useIsFocused } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import { RobotService } from '../../services/RobotService';
 import { ProfileService, ProfileDto } from '../../services/ProfileService';
@@ -395,17 +394,15 @@ export default function HomeScreenMain() {
     }
   };
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
       checkConnectedRobot();
       refreshProfile();
       fetchProducts();
       fetchSponsoredAds();
       fetchCartTotal();
-    }
-  }, [isFocused, searchMode]);
+    }, [searchMode])
+  );
 
   const fetchCartTotal = async () => {
     try {
@@ -550,11 +547,11 @@ export default function HomeScreenMain() {
     }
   };
 
-  useEffect(() => {
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
       fetchMeals();
-    }
-  }, [isFocused]);
+    }, [])
+  );
 
   const spendingLimit = profile?.spendingLimit || 0;
   const budgetPercentage = spendingLimit > 0 ? Math.min((cartTotal / spendingLimit) * 100, 100) : 0;
@@ -1386,7 +1383,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   smartCardOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
     padding: 16,
   },
