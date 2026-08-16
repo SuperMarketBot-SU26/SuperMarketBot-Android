@@ -265,7 +265,30 @@ export default function MapScreenMain() {
         const map = await MapService.getLatestMap(1);
         setMapData(map);
         
-        const path: RoutePoint[] = HARDCODED_MASTER_ROUTE;
+        let path: RoutePoint[] = [];
+        if (params.routePlan) {
+          try {
+            const parsed = typeof params.routePlan === 'string' ? JSON.parse(params.routePlan) : params.routePlan;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              path = parsed.map((p: any) => ({
+                x: p.x || p.xCoord || 0,
+                y: p.y || p.yCoord || 0,
+                description: p.description || p.nodeName || '',
+                productName: p.productName || '',
+                productId: p.productId,
+                nodeName: p.nodeName || '',
+                nodeId: p.nodeId || p.id
+              }));
+            }
+          } catch (e) {
+            console.warn('Error parsing routePlan', e);
+          }
+        }
+        
+        if (path.length === 0) {
+          path = HARDCODED_MASTER_ROUTE;
+        }
+        
         setRoutePoints(path);
         
         if (path.length > 0) {
@@ -852,6 +875,27 @@ export default function MapScreenMain() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
+              
+              {/* Nodes for route */}
+              {routePoints.map((pt, index) => {
+                const p = project(pt.x, pt.y, 1.5);
+                const isStart = index === 0;
+                const isEnd = index === routePoints.length - 1;
+                const r = isLarge ? 6 : 5;
+                const fontSize = isLarge ? "5" : "4";
+                let bgColor = "#2563eb";
+                if (isStart) bgColor = "#16a34a"; // completed/start
+                if (isEnd) bgColor = "#f97316"; // end destination
+                
+                return (
+                  <G key={`node-${index}`}>
+                    <Circle cx={p.x} cy={p.y} r={r} fill={bgColor} stroke="#ffffff" strokeWidth={1} />
+                    <SvgText x={p.x} y={p.y + (isLarge ? 1.8 : 1.4)} fill="#ffffff" fontSize={fontSize} fontWeight="900" textAnchor="middle">
+                      {index + 1}
+                    </SvgText>
+                  </G>
+                );
+              })}
             </G>
           )}
 

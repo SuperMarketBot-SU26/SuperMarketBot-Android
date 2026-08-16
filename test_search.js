@@ -1,7 +1,7 @@
 const fetch = require('node-fetch');
 
 async function testSearch() {
-  const BASE_URL = 'https://interiorly-pinnatisect-adalyn.ngrok-free.dev';
+  const BASE_URL = 'http://10.0.2.2:5000';
   try {
     const url = `${BASE_URL}/api/search?q=Thịt&limit=20&sortBy=relevance&useAi=false`;
     console.log(`GET ${url}`);

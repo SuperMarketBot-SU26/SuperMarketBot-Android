@@ -220,14 +220,10 @@ export default function FaceRegisterScreenMain() {
 
         {/* Footer */}
         <Animated.View entering={FadeInUp.delay(500)} style={styles.footer}>
-          {isDone ? (
+          {isDone && (
             <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace(LOGIN_ROUTE)}>
               <CheckCircle color="white" size={20} style={{ marginRight: 8 }} />
               <Text style={styles.primaryBtnText}>Đăng nhập ngay</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.skipBtn} onPress={async () => { stopCountdown(); await logout(); router.replace(LOGIN_ROUTE); }}>
-              <Text style={styles.skipBtnText}>Bỏ qua, đăng nhập sau</Text>
             </TouchableOpacity>
           )}
           <Text style={styles.footerSecure}>🔒 Bảo mật bởi SmartMarketBot AI</Text>

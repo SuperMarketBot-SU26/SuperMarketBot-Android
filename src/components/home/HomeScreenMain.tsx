@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X, ShoppingCart, Sparkles } from 'lucide-react-native';
+import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X, ShoppingCart, Sparkles, Lock } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Animated as RNAnimated, Modal, Alert, Platform, PermissionsAndroid } from 'react-native';
 import { Image } from 'expo-image';
@@ -80,49 +80,22 @@ const { width, height } = Dimensions.get('window');
 
 const getTierTheme = (tier: string) => {
   switch (tier) {
-    case 'PLATINUM':
+    case 'PREMIUM':
       return {
-        gradient: ['#93C5FD', '#3B82F6'] as const, // Bạch kim (Blue) đậm hơn
-        border: '#BFDBFE',
-        iconBg: '#DBEAFE',
-        iconColor: '#1D4ED8',
-        badgeText: 'PLATINUM',
-        badgeBg: '#3B82F6'
-      };
-    case 'GOLD':
-      return {
-        gradient: ['#FEFCE8', '#FEF08A'] as const, // Vàng (Gold)
+        gradient: ['#FEFCE8', '#FEF08A'] as const, // Vàng (Gold style for Premium)
         border: '#FDE047',
         iconBg: '#FEF08A',
         iconColor: '#A16207',
-        badgeText: 'GOLD',
+        badgeText: 'PREMIUM',
         badgeBg: '#EAB308'
-      };
-    case 'SILVER':
-      return {
-        gradient: ['#F8FAFC', '#E2E8F0'] as const, // Bạc (Silver)
-        border: '#CBD5E1',
-        iconBg: '#E2E8F0',
-        iconColor: '#334155',
-        badgeText: 'SILVER',
-        badgeBg: '#64748B'
-      };
-    case 'BRONZE':
-      return {
-        gradient: ['#FFF7ED', '#FED7AA'] as const, // Đồng (Bronze)
-        border: '#FDBA74',
-        iconBg: '#FFEDD5',
-        iconColor: '#9A3412',
-        badgeText: 'BRONZE',
-        badgeBg: '#C2410C'
       };
     default:
       return {
-        gradient: ['#F3F4F6', '#E5E7EB'] as const, // Mặc định
+        gradient: ['#F3F4F6', '#E5E7EB'] as const, // Mặc định Medium
         border: '#D1D5DB',
         iconBg: '#E5E7EB',
         iconColor: '#4B5563',
-        badgeText: 'MEMBER',
+        badgeText: 'MEDIUM',
         badgeBg: '#6B7280'
       };
   }
@@ -138,9 +111,29 @@ export default function HomeScreenMain() {
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
   const { unreadCount } = useNotification();
-  const userTier = (profile?.membershipTier || 'MEMBER').toUpperCase();
+  const userTier = (profile?.membershipTier || 'MEDIUM').toUpperCase();
   const tierTheme = getTierTheme(userTier);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const checkUpgrade = async () => {
+      if (!profile?.membershipTier) return;
+      const lastTier = await SecureStore.getItemAsync('lastKnownTier');
+      
+      if ((userTier === 'PREMIUM') && lastTier && lastTier !== 'PREMIUM') {
+        Alert.alert(
+          "🎉 Chúc mừng!",
+          "Tài khoản của bạn đã được nâng cấp hạng thành viên cao cấp.\n\nĐã mở khóa tính năng Tìm kiếm cá nhân hóa, gợi ý món ăn bằng AI và nhiều đặc quyền khác!",
+          [{ text: "Khám phá ngay" }]
+        );
+      }
+      
+      if (userTier !== lastTier) {
+        await SecureStore.setItemAsync('lastKnownTier', userTier);
+      }
+    };
+    checkUpgrade();
+  }, [userTier, profile?.membershipTier]);
 
   // Recipe Assistant Modal states
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeDto | null>(null);
@@ -613,10 +606,23 @@ export default function HomeScreenMain() {
           <View style={styles.searchToggle}>
             <TouchableOpacity
               style={[styles.toggleBtn, searchMode === 'personal' && styles.toggleBtnActive]}
-              onPress={() => setSearchMode('personal')}
+              onPress={() => {
+                if (userTier === 'PREMIUM') {
+                  setSearchMode('personal');
+                } else {
+                  Alert.alert(
+                    "Tính năng khóa",
+                    "Tìm kiếm cá nhân hóa chỉ dành cho thành viên Premium trở lên. Vui lòng nâng cấp tài khoản để sử dụng."
+                  );
+                }
+              }}
               activeOpacity={0.8}
             >
-              {searchMode === 'personal' && <CheckCircle2 color="white" size={16} style={{ marginRight: 6 }} />}
+              {searchMode === 'personal' ? (
+                <CheckCircle2 color="white" size={16} style={{ marginRight: 6 }} />
+              ) : (userTier !== 'PREMIUM') ? (
+                <Lock color="#9CA3AF" size={14} style={{ marginRight: 4 }} />
+              ) : null}
               <Text style={[styles.toggleBtnText, searchMode === 'personal' && styles.toggleBtnTextActive]}>Tìm cá nhân hóa</Text>
             </TouchableOpacity>
             <TouchableOpacity
