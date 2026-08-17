@@ -296,22 +296,7 @@ export default function ShoppingPreferencesScreenMain() {
           <Animated.View entering={FadeInDown.delay(400)} style={styles.section}>
             <View style={styles.sectionHeader}>
               <Wallet color="#92400E" size={20} />
-              <Text style={styles.sectionTitle}>Ngân sách</Text>
-            </View>
-
-            {/* Segmented Control */}
-            <View style={styles.segmentControl}>
-              {['Ngày', 'Tuần', 'Tháng'].map((period) => (
-                <TouchableOpacity
-                  key={period}
-                  style={[styles.segmentBtn, budgetPeriod === period && styles.segmentBtnActive]}
-                  onPress={() => setBudgetPeriod(period)}
-                >
-                  <Text style={[styles.segmentText, budgetPeriod === period && styles.segmentTextActive]}>
-                    {period}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              <Text style={styles.sectionTitle}>Chi tiêu tối đa cho 1 đơn hàng</Text>
             </View>
 
             {/* Budget Card */}

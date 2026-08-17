@@ -1,15 +1,15 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Map, Plus, ShoppingBag, Star, User, Zap } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { AlertTriangle, ArrowLeft, ArrowRight, Plus, ShoppingBag, Star, Zap } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { SearchService, SearchResultItemDto } from '../../services/SearchService';
 import { CartService } from '../../services/CartService';
-import { ProductService, ProductDto } from '../../services/ProductService';
 import { PersonalizationService } from '../../services/PersonalizationService';
+import { ProductDto, ProductService } from '../../services/ProductService';
+import { SearchResultItemDto, SearchService } from '../../services/SearchService';
 import { fixMojibake } from '../../utils/textUtils';
 
 const { width } = Dimensions.get('window');
@@ -41,8 +41,83 @@ export default function SearchScreenMain() {
       setRestrictedInfo(null);
       try {
         const isPersonal = mode === 'personal';
-        let searchResults;
-        if (isPersonal) {
+        const intent = SearchService.classifyIntent(searchQuery as string);
+        let searchResults: any = {
+          query: searchQuery as string,
+          totalMatches: 0,
+          results: [],
+          aiRanked: false,
+          aiExplanation: null,
+        };
+
+        if (intent === 'recipe') {
+          console.log(`[SearchScreenMain] Phát hiện ý định tìm công thức nấu ăn. Đang gọi recommendIngredients...`);
+          let finalQuery = searchQuery as string;
+          if (auth?.profile) {
+            try {
+              let notes: string[] = [];
+              if (auth.profile.spendingLimit) {
+                notes.push(`Ngân sách tối đa: ${auth.profile.spendingLimit.toLocaleString('vi-VN')}đ (Nếu vượt quá, đề xuất món rẻ hơn)`);
+              }
+
+              try {
+                const prefs = await PersonalizationService.getHealthPreferences();
+                const diets = Array.isArray(prefs?.preferreds) ? prefs.preferreds.map((p: any) => p.tagName) : [];
+                const allergiesList = [
+                  ...(Array.isArray(prefs?.allergies) ? prefs.allergies : []),
+                  ...(Array.isArray(prefs?.avoids) ? prefs.avoids : [])
+                ];
+                const allergies = allergiesList.map((p: any) => p.tagName);
+
+                if (diets.length > 0 || allergies.length > 0) {
+                  notes.push(
+                    `HƯỚNG DẪN 2 BƯỚC: Bước 1: Liệt kê ĐẦY ĐỦ nguyên liệu GỐC chuẩn truyền thống (không tự ý bỏ thịt/cá nếu món gốc có). Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU nguyên liệu gốc VI PHẠM, hãy set "isRestricted": true và điền tên sản phẩm chay/an toàn thay thế vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.`
+                  );
+                }
+              } catch (e) {
+                console.warn('[SearchScreenMain] Lỗi lấy health preferences:', e);
+              }
+
+              if (notes.length > 0) {
+                finalQuery = `${finalQuery} (Lưu ý: ${notes.join(' | ')})`;
+              }
+            } catch (e) {
+              console.warn('[SearchScreenMain] Không thể lấy profile:', e);
+            }
+          }
+          console.log(`[SearchScreenMain] Query cuối cùng gửi cho AI: "${finalQuery}"`);
+          const recipeData = await SearchService.recommendIngredients(finalQuery);
+          if (recipeData && recipeData.ingredients) {
+            searchResults.results = recipeData.ingredients.map((ing: any) => {
+              let isRestricted = ing.isRestricted === true;
+              let altName = ing.altName || null;
+              let desc = ing.reason || ing.quantityText;
+
+              if (desc && desc.startsWith('[VI PHẠM]')) {
+                desc = desc.replace('[VI PHẠM]', '').trim();
+              }
+
+              return {
+                productId: ing.productId,
+                productName: ing.productName,
+                description: desc,
+                unitPrice: ing.unitPrice,
+                promotionPrice: null,
+                imageUrl: ing.imageUrl,
+                status: 'instock',
+                categoryName: 'Nguyên liệu gợi ý',
+                subcategoryName: null,
+                productTypeName: null,
+                healthTags: [],
+                isRestricted,
+                altName,
+              };
+            });
+            searchResults.totalMatches = recipeData.ingredients.length;
+            searchResults.aiRanked = true;
+            searchResults.aiExplanation = 'Đây là các nguyên liệu AI đề xuất cho món ăn của bạn.';
+          }
+        } else if (isPersonal) {
           searchResults = await SearchService.searchPersonalized({
             q: searchQuery as string,
             useAi: true,
@@ -60,12 +135,9 @@ export default function SearchScreenMain() {
         setAiRanked(searchResults.aiRanked || false);
         setAiExplanation(searchResults.aiExplanation || null);
 
-        // Fetch products for suggestions (use personalized if in personal mode)
         let products: ProductDto[] = [];
         try {
           if (isPersonal) {
-            // Nếu kết quả tìm kiếm cá nhân hóa = 0 (do bị lọc dị ứng/tránh), 
-            // tìm sản phẩm gốc và gọi API alternatives để lấy đúng các sản phẩm thay thế an toàn
             if (searchQuery) {
               const rawAll = await SearchService.searchAll({ q: searchQuery as string });
               if ((!searchResults.results || searchResults.results.length === 0)) {
@@ -76,7 +148,6 @@ export default function SearchScreenMain() {
                   products = await ProductService.getAlternatives(targetProduct.productId, auth?.profile?.memberId);
                 }
               } else if (rawAll.results && rawAll.results.length > searchResults.results.length) {
-                // Có sản phẩm bị lọc nhưng vẫn có kết quả trả về
                 setRestrictedInfo({ isRestricted: true, productName: 'Một số sản phẩm' });
               }
             }
@@ -89,7 +160,7 @@ export default function SearchScreenMain() {
           }
         } catch (e) {
           console.warn('[SearchScreenMain] Lỗi khi lấy products gợi ý:', e);
-          products = await ProductService.getProducts(); // Fallback
+          products = await ProductService.getProducts();
         }
 
         setAiSuggestions(products.slice(0, 3));
@@ -110,6 +181,7 @@ export default function SearchScreenMain() {
       case 'discount': return { bg: '#FFF7ED', text: '#EA580C' };
       case 'organic': return { bg: '#F3F4F6', text: '#4B5563' };
       case 'popular': return { bg: '#D1FAE5', text: '#059669' };
+      case 'danger': return { bg: '#FEF2F2', text: '#DC2626' };
       default: return { bg: '#F3F4F6', text: '#4B5563' };
     }
   };
@@ -126,9 +198,8 @@ export default function SearchScreenMain() {
       tags.push({ text: item.status === 'instock' ? 'CÒN HÀNG' : 'HẾT HÀNG', type: 'popular' });
     }
 
-    const price = item.promotionPrice !== null && item.promotionPrice !== undefined
-      ? `${item.promotionPrice.toLocaleString('vi-VN')}đ`
-      : `${item.unitPrice.toLocaleString('vi-VN')}đ`;
+    const currentPrice = item.promotionPrice ?? item.unitPrice ?? 0;
+    const price = `${currentPrice.toLocaleString('vi-VN')}đ`;
 
     const fallbackImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop';
 
@@ -141,6 +212,8 @@ export default function SearchScreenMain() {
       reviews: Math.floor(Math.random() * 80) + 20,
       price,
       relevanceScore: item.relevanceScore || 0,
+      isRestricted: item.isRestricted,
+      altName: item.altName,
     };
   });
 
@@ -266,19 +339,22 @@ export default function SearchScreenMain() {
                             );
                           })}
                         </View>
-                        {mode === 'personal' && product.relevanceScore > 0 && (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#ECFDF5', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                            <Zap color="#059669" size={12} fill="#059669" />
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669', marginLeft: 4 }}>
-                              Độ phù hợp: {product.relevanceScore}%
+                        {/* Removed relevance score rendering */}
+                        {product.isRestricted && (
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#FEF2F2', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6, flexWrap: 'wrap' }}
+                            onPress={() => {
+                              if (product.altName) {
+                                router.setParams({ query: product.altName });
+                              }
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#DC2626', marginLeft: 4 }}>
+                              ⚠️ VI PHẠM CHẾ ĐỘ ĂN
                             </Text>
-                          </View>
+                          </TouchableOpacity>
                         )}
                         <Text style={styles.productTitle} numberOfLines={2}>{product.title}</Text>
-                        <View style={styles.ratingRow}>
-                          <Star color="#F59E0B" size={14} fill="#F59E0B" />
-                          <Text style={styles.ratingText}>{product.rating} <Text style={styles.reviewText}>({product.reviews} đánh giá)</Text></Text>
-                        </View>
                         <View style={styles.priceRow}>
                           <Text style={styles.priceText}>{product.price}</Text>
                           <TouchableOpacity style={styles.addButton} onPress={async () => {

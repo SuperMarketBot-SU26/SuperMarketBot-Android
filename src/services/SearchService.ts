@@ -14,6 +14,8 @@ export interface SearchResultItemDto {
   productTypeName: string | null;
   relevanceScore: number;
   healthTags: string[];
+  isRestricted?: boolean;
+  altName?: string | null;
 }
 
 export interface SearchResponseDto {
@@ -39,6 +41,19 @@ export interface RecommendIngredientsResponseDto {
 }
 
 export class SearchService {
+  static classifyIntent(query: string): 'recipe' | 'product' {
+    if (!query) return 'product';
+    const lowerQuery = query.toLowerCase();
+    const recipeKeywords = [
+      'nấu', 'món', 'cách làm', 'công thức', 'hướng dẫn',
+      'canh', 'kho', 'chiên', 'xào', 'luộc', 'gỏi', 'lẩu', 'chuẩn bị', 'nguyên liệu'
+    ];
+    if (recipeKeywords.some(kw => lowerQuery.includes(kw))) {
+      return 'recipe';
+    }
+    return 'product';
+  }
+
   static async searchAll(params: {
     q: string;
     limit?: number;

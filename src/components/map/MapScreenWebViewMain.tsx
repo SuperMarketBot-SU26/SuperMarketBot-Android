@@ -1,9 +1,10 @@
-import * as React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Dimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, Dimensions, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Maximize2, Home, Map, ShoppingBag, User, MapPin } from 'lucide-react-native';
 import CartGuideMap from './CartGuideMap';
+import { NavigationService } from '../../services/NavigationService';
 
 const { width } = Dimensions.get('window');
 
@@ -11,24 +12,66 @@ export default function MapScreenWebViewMain() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
-  // Only use routePlan if it's passed. No fallback to master route.
-  let routePlan: any[] = [];
-  try {
-    if (params.routePlan) {
-      routePlan = typeof params.routePlan === 'string' ? JSON.parse(params.routePlan) : params.routePlan;
-    }
-  } catch (e) {
-    console.warn('Error parsing routePlan', e);
-  }
+  const [routePlan, setRoutePlan] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const mapDestinations = routePlan.map((p: any) => ({
-    nodeId: p.nodeId || p.id || 0,
-    xCoord: p.x || p.xCoord || 0,
-    yCoord: p.y || p.yCoord || 0,
-    nodeName: p.description || p.nodeName || '',
-    productNames: p.productName ? [p.productName] : [],
+  useEffect(() => {
+    async function loadRoute() {
+      // 1. Dùng productIds để tự gọi API
+      if (params.productIds) {
+        setLoading(true);
+        try {
+          const ids = typeof params.productIds === 'string' ? JSON.parse(params.productIds) : params.productIds;
+          if (Array.isArray(ids) && ids.length > 0) {
+            const data: any = await NavigationService.optimizeShoppingRoute(ids);
+            if (data) {
+              const route = data.optimizedRoute || data.waypoints || data.Waypoints || data.routeNodes || data.RouteNodes || (Array.isArray(data) ? data : []);
+              setRoutePlan(route);
+            }
+          }
+        } catch (e: any) {
+          console.warn('Lỗi khi gọi optimizeShoppingRoute:', e);
+          setErrorMsg(e.message || 'Lỗi tìm lộ trình');
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // 2. Fallback: Dùng routePlan truyền thẳng từ params
+      if (params.routePlan) {
+        try {
+          const parsed = typeof params.routePlan === 'string' ? JSON.parse(params.routePlan) : params.routePlan;
+          if (Array.isArray(parsed)) {
+            setRoutePlan(parsed);
+          } else if (parsed && Array.isArray(parsed.items)) {
+            setRoutePlan(parsed.items);
+          }
+        } catch (e) {
+          console.warn('Error parsing routePlan', e);
+        }
+      }
+    }
+    loadRoute();
+  }, [params.productIds, params.routePlan]);
+
+  const mapDestinations = routePlan.map((p: any, index: number) => ({
+    nodeId: p.nodeId || p.NodeId || `node-${index}`,
+    xCoord: p.xCoord ?? p.x ?? p.X ?? 0,
+    yCoord: p.yCoord ?? p.y ?? p.Y ?? 0,
+    nodeName: p.nodeName || p.NodeName || p.locationName || 'Trạm',
+    productNames: p.productName || p.ProductName ? [p.productName || p.ProductName] : [],
+    isDoor: p.nodeName === 'Cửa' || p.NodeName === 'Cửa'
   }));
 
+  // Remove fake Cửa node logic since backend handles it now
+
+  const highlightedShelves = mapDestinations.map(d => {
+    if (!d.nodeName) return '';
+    const match = d.nodeName.match(/Kệ\s*(\d+)/i);
+    return match ? `KV${match[1]}` : d.nodeName;
+  }).filter(Boolean);
   const hasRoute = mapDestinations.length > 0;
 
   return (
@@ -46,12 +89,24 @@ export default function MapScreenWebViewMain() {
 
       {/* Map Content */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-        {hasRoute ? (
+        {loading ? (
+          <View style={styles.emptyCard}>
+            <ActivityIndicator size="large" color="#059669" />
+            <Text style={{ marginTop: 12, color: '#64748B' }}>Đang tính toán lộ trình tối ưu...</Text>
+          </View>
+        ) : errorMsg ? (
+          <View style={styles.emptyCard}>
+            <MapPin size={40} color="#EF4444" style={{ marginBottom: 16 }} />
+            <Text style={[styles.emptyTextTitle, { color: '#EF4444' }]}>Lỗi lộ trình</Text>
+            <Text style={styles.emptyText}>{errorMsg}</Text>
+          </View>
+        ) : hasRoute ? (
           <View style={styles.mapCard}>
             <CartGuideMap
               destinations={mapDestinations}
               currentWaypointIndex={0}
               robotPose={null}
+              highlightedShelves={highlightedShelves}
             />
             <View style={styles.legendRow}>
               <Text style={styles.legend}>🔵 Điểm cần ghé</Text>

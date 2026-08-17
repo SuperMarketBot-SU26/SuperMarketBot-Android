@@ -1,15 +1,16 @@
 import { useRouter } from 'expo-router';
-import { ArrowRight, AtSign, Eye, EyeOff, Lock, Smile, AlertCircle, CheckCircle2 } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Modal } from 'react-native';
-import Animated, {
-  FadeInLeft, FadeInRight, FadeInUp, FadeIn,
-  useAnimatedStyle, useSharedValue, withSpring,
-  Easing, SlideInUp, SlideOutUp,
-} from 'react-native-reanimated';
-import { AuthService } from '../../services/AuthService';
-import { useAuth } from '../../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
+import { AlertCircle, ArrowRight, AtSign, Eye, EyeOff, Lock, Smile } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, {
+  Easing,
+  FadeInLeft, FadeInRight, FadeInUp,
+  SlideInUp, SlideOutUp,
+  useAnimatedStyle, useSharedValue, withSpring
+} from 'react-native-reanimated';
+import { useAuth } from '../../context/AuthContext';
+import { AuthService } from '../../services/AuthService';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -19,13 +20,13 @@ type ToastType = 'error' | 'success' | 'warning';
 function InlineToast({ message, type }: { message: string; type: ToastType }) {
   const bgColor = type === 'error' ? '#FEF2F2'
     : type === 'success' ? '#F0FDF4'
-    : '#FFFBEB';
+      : '#FFFBEB';
   const borderColor = type === 'error' ? '#FECACA'
     : type === 'success' ? '#BBF7D0'
-    : '#FDE68A';
+      : '#FDE68A';
   const textColor = type === 'error' ? '#DC2626'
     : type === 'success' ? '#16A34A'
-    : '#D97706';
+      : '#D97706';
 
   return (
     <Animated.View
@@ -180,9 +181,6 @@ export default function LoginForm() {
       <Animated.View entering={FadeInRight.delay(450).duration(500).easing(Easing.out(Easing.exp))} style={styles.inputGroup}>
         <View style={styles.labelRow}>
           <Text style={styles.label}>Mật khẩu</Text>
-          <TouchableOpacity onPress={() => { setForgotEmail(email); setForgotStep(1); setForgotModalVisible(true); }}>
-            <Text style={styles.forgotPassword}>Quên mật khẩu?</Text>
-          </TouchableOpacity>
         </View>
         <View style={styles.inputContainer}>
           <Lock color="#9CA3AF" size={20} style={styles.inputIcon} />
@@ -236,7 +234,6 @@ export default function LoginForm() {
       <Modal visible={isForgotModalVisible} transparent animationType="fade" onRequestClose={() => setForgotModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Quên mật khẩu</Text>
             {forgotStep === 1 ? (
               <>
                 <Text style={styles.modalSubtitle}>Nhập email của bạn để nhận mã OTP khôi phục mật khẩu.</Text>

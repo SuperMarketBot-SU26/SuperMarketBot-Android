@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Modal, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown, ChevronUp, Bell, HelpCircle, ShoppingBag, Truck, Package, CheckCircle2, RefreshCw, Sparkles, X, Map as MapIcon } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { ProfileService } from '../../services/ProfileService';
 import { MAP_HTML } from '../map/MapHtml';
+import { CartService } from '../../services/CartService';
 
 // Dummy data for filter tabs
 const FILTERS = ['Tất cả', 'Tháng này', 'Đã giao', 'Đang xử lý'];
@@ -58,6 +59,26 @@ export default function OrderHistoryScreenMain() {
         routePlan: JSON.stringify(mockRoute.path)
       }
     });
+  };
+
+  const handleBuyAgain = async (order: any) => {
+    try {
+      if (!order.items || order.items.length === 0) {
+        ToastAndroid.show('Đơn hàng không có sản phẩm nào', ToastAndroid.SHORT);
+        return;
+      }
+      
+      ToastAndroid.show('Đang thêm vào giỏ hàng...', ToastAndroid.SHORT);
+      
+      for (const item of order.items) {
+        await CartService.addItem(item.productId, item.quantity);
+      }
+      
+      ToastAndroid.show('Đã thêm các sản phẩm vào giỏ hàng', ToastAndroid.SHORT);
+      router.push('/cart');
+    } catch (e: any) {
+      ToastAndroid.show(e.message || 'Có lỗi xảy ra', ToastAndroid.SHORT);
+    }
   };
 
   return (
@@ -186,7 +207,10 @@ export default function OrderHistoryScreenMain() {
                             <MapIcon color="#059669" size={16} style={{ marginRight: 6 }} />
                             <Text style={styles.btnOutlineText}>Xem lộ trình</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={[styles.btnSolid, { flex: 1, marginLeft: 12 }]}>
+                          <TouchableOpacity 
+                            style={[styles.btnSolid, { flex: 1, marginLeft: 12 }]}
+                            onPress={() => handleBuyAgain(order)}
+                          >
                             <RefreshCw color="white" size={16} style={{ marginRight: 6 }} />
                             <Text style={styles.btnSolidText}>Mua lại</Text>
                           </TouchableOpacity>

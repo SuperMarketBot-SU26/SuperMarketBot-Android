@@ -193,6 +193,11 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
         console.log('[RobotHub] status:', payload);
       });
 
+      // Silence warnings for telemetry and robotlog
+      connection.on('telemetry', () => {});
+      connection.on('robotlog', () => {});
+      connection.on('zoneentered', () => {});
+
       try {
         await connection.start();
         console.log('[SignalR] Connected to RobotHub (/hubs/robot)');

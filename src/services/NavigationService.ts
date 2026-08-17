@@ -13,6 +13,12 @@ export interface RouteResponseDto {
   totalDistance: number;
 }
 
+export interface OptimizeShoppingRouteResponseDto {
+  optimizedRoute: RouteNodeDto[];
+  totalDistance: number;
+  messageVi: string;
+}
+
 export interface DispatchAutonomousRequestDto {
   robotCode: string;
   flowType: string;
@@ -80,15 +86,67 @@ export class NavigationService {
     if (!response.ok) {
       let errorMsg = `Failed to get route (${response.status})`;
       try {
-        const errorData = await response.json();
-        errorMsg = errorData.message || errorMsg;
+        const textData = await response.text();
+        try {
+          const errorData = JSON.parse(textData);
+          errorMsg = errorData.message || errorMsg;
+        } catch {
+          errorMsg = textData || errorMsg;
+        }
       } catch (e) {
-        errorMsg = await response.text();
+        console.warn('Cannot read error response', e);
       }
       throw new Error(errorMsg);
     }
 
     return response.json();
+  }
+
+  /**
+   * Optimize shopping route for multiple products
+   */
+  static async optimizeShoppingRoute(
+    productIds: number[],
+    startX: number = 7.25,
+    startY: number = 8.6
+  ): Promise<OptimizeShoppingRouteResponseDto> {
+    const token = await this.getToken();
+    const url = `${BASE_URL}/api/Navigation/optimize-shopping-route`;
+    const payload = {
+      robotId: 1, // Add dummy robotId to pass BE validation
+      startNodeId: 10033, // NodeID of waypoint 8
+      productIds,
+    };
+    console.log('[NavigationService] optimizeShoppingRoute payload:', payload);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Failed to optimize route (${response.status})`;
+      try {
+        const textData = await response.text();
+        try {
+          const errorData = JSON.parse(textData);
+          errorMsg = errorData.message || errorMsg;
+        } catch {
+          errorMsg = textData || errorMsg;
+        }
+      } catch (e) {
+        console.warn('Cannot read error response', e);
+      }
+      throw new Error(errorMsg);
+    }
+
+    const data = await response.json();
+    console.log('[NavigationService] optimizeShoppingRoute response:', data);
+    return data;
   }
 
   /**
@@ -112,10 +170,15 @@ export class NavigationService {
     if (!response.ok) {
       let errorMsg = `Failed to dispatch robot (${response.status})`;
       try {
-        const errorData = await response.json();
-        errorMsg = errorData.message || errorMsg;
+        const textData = await response.text();
+        try {
+          const errorData = JSON.parse(textData);
+          errorMsg = errorData.message || errorMsg;
+        } catch {
+          errorMsg = textData || errorMsg;
+        }
       } catch (e) {
-        errorMsg = await response.text();
+        console.warn('Cannot read error response', e);
       }
       throw new Error(errorMsg);
     }

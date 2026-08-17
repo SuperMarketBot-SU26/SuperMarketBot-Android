@@ -160,9 +160,19 @@ export class CartService {
     });
 
     if (!response.ok) {
-      const { rawText, data } = await parseErrorBody(response);
-      console.error(`[CartService.checkout] Error body (${response.status}):`, rawText);
-      throw new Error(data.error || data.message || data.detail || `Thanh toán giỏ hàng thất bại (${response.status})`);
+      let errorMsg = `Thanh toán giỏ hàng thất bại (${response.status})`;
+      try {
+        const textData = await response.text();
+        try {
+          const errorData = JSON.parse(textData);
+          errorMsg = errorData.error || errorData.message || errorData.detail || errorMsg;
+        } catch {
+          errorMsg = textData || errorMsg;
+        }
+      } catch (e) {
+        console.warn('Cannot read error response', e);
+      }
+      throw new Error(errorMsg);
     }
 
     return response.json();

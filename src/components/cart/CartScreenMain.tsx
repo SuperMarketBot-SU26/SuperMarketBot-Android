@@ -281,19 +281,22 @@ export default function CartScreenMain() {
       try {
         checkoutResult = await CartService.checkout();
       } catch (err) {
-        console.warn('Cart checkout BE API error, using hardcoded master route fallback for UI test:', err);
+        console.warn('Cart checkout BE API error:', err);
       }
       
+      const ids = cart?.items ? cart.items.map(i => i.productId) : [];
       router.push({
         pathname: '/map' as any,
         params: {
+          productIds: JSON.stringify(ids),
           routePlan: checkoutResult ? JSON.stringify(checkoutResult.waypoints || checkoutResult.routePlan || checkoutResult) : '[]',
           invoice: checkoutResult ? JSON.stringify(checkoutResult.invoice || checkoutResult) : '{}'
         }
       });
     } catch (error) {
       console.error('Error during checkout:', error);
-      router.push('/map' as any);
+      const ids = cart?.items ? cart.items.map(i => i.productId) : [];
+      router.push({ pathname: '/map' as any, params: { productIds: JSON.stringify(ids) } });
     } finally {
       setCheckingOut(false);
     }
@@ -389,16 +392,6 @@ export default function CartScreenMain() {
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Tạm tính</Text>
                     <Text style={styles.summaryValue}>{formatPrice(cart.totalPrice)}</Text>
-                  </View>
-
-                  <View style={styles.aiDiscountRow}>
-                    <View style={styles.aiDiscountLeft}>
-                      <Zap color="#059669" size={14} fill="#059669" style={{ marginRight: 6 }} />
-                      <Text style={styles.aiDiscountText}>Điểm tích lũy ước tính (+10%)</Text>
-                    </View>
-                    <Text style={styles.aiDiscountValue}>
-                      +{Math.floor(cart.totalPrice * 0.1).toLocaleString('vi-VN')} pts
-                    </Text>
                   </View>
 
                   <View style={styles.divider} />

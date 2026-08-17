@@ -12,6 +12,8 @@ export interface RecipeIngredientDto {
   currentStock: number;
   locationNodeId?: number;
   shelfLocation?: string;
+  isRestricted?: boolean;
+  altName?: string;
 }
 
 export interface MenuAssistantResponseDto {

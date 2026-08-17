@@ -25,10 +25,12 @@ const SLAM_MAX_Y = Number(process.env.EXPO_PUBLIC_GUIDE_MAP_MAX_Y ?? 1.4755);
 const SHELVES = [
   { id: 'kv3-h', label: 'KV3', x: 1.2, y: 0.5, w: 2, h: 0.65, fill: '#FEF3C7', stroke: '#F59E0B', text: '#92400E' },
   { id: 'kv3-v', label: 'KV3', x: 0.5, y: 1.4, w: 0.65, h: 1.7, fill: '#FEF3C7', stroke: '#F59E0B', text: '#92400E' },
+  { id: 'kv1-h', label: 'KV1', x: 3.5, y: 0.5, w: 2, h: 0.65, fill: '#D1FAE5', stroke: '#10B981', text: '#065F46' },
   { id: 'kv2-h', label: 'KV2', x: 5.7, y: 0.5, w: 2, h: 0.65, fill: '#DBEAFE', stroke: '#3B82F6', text: '#1E3A8A' },
   { id: 'kv2-v', label: 'KV2', x: 7.85, y: 1.4, w: 0.65, h: 1.7, fill: '#DBEAFE', stroke: '#3B82F6', text: '#1E3A8A' },
   { id: 'kv4-a', label: 'KV4', x: 0.5, y: 6.8, w: 0.7, h: 1.6, fill: '#EDE9FE', stroke: '#8B5CF6', text: '#4C1D95' },
   { id: 'kv4-b', label: 'KV4', x: 2.4, y: 6.8, w: 0.7, h: 1.6, fill: '#EDE9FE', stroke: '#8B5CF6', text: '#4C1D95' },
+  { id: 'kv5-a', label: 'KV5', x: 4.5, y: 6.8, w: 1.5, h: 0.8, fill: '#FFE4E6', stroke: '#F43F5E', text: '#9F1239' },
 ];
 
 interface Point { x: number; y: number }
@@ -37,6 +39,7 @@ interface CartGuideMapProps {
   destinations: GuideDestination[];
   currentWaypointIndex: number;
   robotPose: GuideRobotPose | null;
+  highlightedShelves?: string[];
 }
 
 function RouteSegment({ from, to, color = '#0ea5e9' }: { from: Point; to: Point; color?: string }) {
@@ -61,7 +64,7 @@ function RouteSegment({ from, to, color = '#0ea5e9' }: { from: Point; to: Point;
   );
 }
 
-export default function CartGuideMap({ destinations, currentWaypointIndex, robotPose }: CartGuideMapProps) {
+export default function CartGuideMap({ destinations, currentWaypointIndex, robotPose, highlightedShelves = [] }: CartGuideMapProps) {
   const [size, setSize] = useState(0);
   const floorSize = Math.max(size - MAP_PAD * 2, 1);
   const ppm = floorSize / STORE_SIZE;
@@ -85,7 +88,9 @@ export default function CartGuideMap({ destinations, currentWaypointIndex, robot
     };
   };
 
-  const routePoints = destinations.map(item => projection({ x: item.xCoord, y: item.yCoord }));
+  const routePoints = destinations.map(item => {
+    return projection({ x: item.xCoord, y: item.yCoord });
+  });
   const projectedRobot = robotPose ? projection(robotPose) : null;
   const clamp = (value: number) => Math.max(0.25, Math.min(8.75, value));
   const toPixel = (point: Point): Point => ({
@@ -115,24 +120,33 @@ export default function CartGuideMap({ destinations, currentWaypointIndex, robot
             </React.Fragment>
           ))}
 
-          {SHELVES.map(shelf => (
-            <View
-              key={shelf.id}
-              style={[
-                styles.shelf,
-                {
-                  left: MAP_PAD + shelf.x * ppm,
-                  top: MAP_PAD + shelf.y * ppm,
-                  width: shelf.w * ppm,
-                  height: shelf.h * ppm,
-                  backgroundColor: shelf.fill,
-                  borderColor: shelf.stroke,
-                },
-              ]}
-            >
-              <Text style={[styles.shelfText, { color: shelf.text }]}>{shelf.label}</Text>
-            </View>
-          ))}
+          {SHELVES.map(shelf => {
+            const isHighlighted = highlightedShelves.length === 0 || highlightedShelves.some(label => label.toUpperCase().includes(shelf.label.toUpperCase()));
+            return (
+              <View
+                key={shelf.id}
+                style={[
+                  styles.shelf,
+                  {
+                    left: MAP_PAD + shelf.x * ppm,
+                    top: MAP_PAD + shelf.y * ppm,
+                    width: shelf.w * ppm,
+                    height: shelf.h * ppm,
+                    backgroundColor: isHighlighted ? shelf.fill : '#F1F5F9', // Dim if not highlighted
+                    borderColor: isHighlighted ? shelf.stroke : '#CBD5E1',
+                    opacity: isHighlighted ? 1 : 0.6,
+                    elevation: isHighlighted ? 4 : 1,
+                    shadowColor: isHighlighted ? shelf.stroke : 'transparent',
+                    shadowOffset: { width: 0, height: isHighlighted ? 4 : 0 },
+                    shadowOpacity: isHighlighted ? 0.4 : 0,
+                    shadowRadius: isHighlighted ? 6 : 0,
+                  },
+                ]}
+              >
+                <Text style={[styles.shelfText, { color: isHighlighted ? shelf.text : '#94A3B8' }]}>{shelf.label}</Text>
+              </View>
+            );
+          })}
 
           {pixelRoute.slice(1).map((point, index) => (
             <RouteSegment key={`segment-${index}`} from={pixelRoute[index]} to={point} />
@@ -146,7 +160,7 @@ export default function CartGuideMap({ destinations, currentWaypointIndex, robot
             const completed = index < currentWaypointIndex;
             return (
               <View
-                key={`stop-${destinations[index]?.nodeId ?? index}`}
+                key={`stop-${index}-${destinations[index]?.nodeId ?? 'none'}`}
                 style={[
                   styles.stop,
                   { left: point.x - 14, top: point.y - 14 },
@@ -161,7 +175,7 @@ export default function CartGuideMap({ destinations, currentWaypointIndex, robot
 
           {pixelRobot && (
             <View style={[styles.robot, { left: pixelRobot.x - 19, top: pixelRobot.y - 19 }]}>
-              <Text style={styles.robotEmoji}>ðŸ¤–</Text>
+              <Text style={styles.robotEmoji}>🤖</Text>
             </View>
           )}
 
@@ -171,7 +185,7 @@ export default function CartGuideMap({ destinations, currentWaypointIndex, robot
           <View style={[styles.wallBottom, { left: MAP_PAD, top: MAP_PAD + floorSize - 5, width: floorSize * (6.5 / 9) }]} />
           <View style={[styles.wallBottom, { left: MAP_PAD + floorSize * (8 / 9), top: MAP_PAD + floorSize - 5, width: floorSize / 9 }]} />
           <View style={[styles.door, { left: MAP_PAD + floorSize * (6.5 / 9), top: MAP_PAD + floorSize - 5, width: floorSize * (1.5 / 9) }]}>
-            <Text style={styles.doorText}>Cá»¬A</Text>
+            <Text style={styles.doorText}>CỬA</Text>
           </View>
         </View>
       )}

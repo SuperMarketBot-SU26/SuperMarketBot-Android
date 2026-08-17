@@ -1,26 +1,24 @@
+import Voice from '@react-native-voice/voice';
+import { useIsFocused } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Bell, Camera, CheckCircle2, Home, Map, Mic, Navigation, Plus, Search, ShoppingBag, Star, User, Wallet, Zap, Bot, Battery, X, ShoppingCart, Sparkles, Lock } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Animated as RNAnimated, Modal, Alert, Platform, PermissionsAndroid } from 'react-native';
-import { Image } from 'expo-image';
-import Animated, { FadeInDown, FadeInRight, FadeInUp, SharedTransition, withTiming } from 'react-native-reanimated';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ProductService, ProductDto } from '../../services/ProductService';
-import { useIsFocused } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
-import { RobotService } from '../../services/RobotService';
-import { ProfileService, ProfileDto } from '../../services/ProfileService';
-import { CartService } from '../../services/CartService';
-import { PersonalizationService, RecipeDto } from '../../services/PersonalizationService';
-import { MealSuggestionService, MenuAssistantResponseDto } from '../../services/MealSuggestionService';
-import { SearchService } from '../../services/SearchService';
+import { AlertTriangle, Bell, Bot, CheckCircle2, Home, Lock, Map, Mic, Plus, Search, ShoppingBag, ShoppingCart, Sparkles, User, X, Zap } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Modal, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
+import { CartService } from '../../services/CartService';
+import { MealSuggestionService, MenuAssistantResponseDto } from '../../services/MealSuggestionService';
 import { MemberAdService, SponsoredRecommendationDto } from '../../services/MemberAdService';
-import { AlertTriangle } from 'lucide-react-native';
-import Voice from '@react-native-voice/voice';
-import Svg, { Circle, G, Text as SvgText } from 'react-native-svg';
+import { PersonalizationService, RecipeDto } from '../../services/PersonalizationService';
+import { ProductDto, ProductService } from '../../services/ProductService';
+import { RobotService } from '../../services/RobotService';
+import { SearchService } from '../../services/SearchService';
 import { fixMojibake } from '../../utils/textUtils';
 const cleanSearchQuery = (query: string): string => {
   if (!query) return '';
@@ -119,7 +117,7 @@ export default function HomeScreenMain() {
     const checkUpgrade = async () => {
       if (!profile?.membershipTier) return;
       const lastTier = await SecureStore.getItemAsync('lastKnownTier');
-      
+
       if ((userTier === 'PREMIUM') && lastTier && lastTier !== 'PREMIUM') {
         Alert.alert(
           "🎉 Chúc mừng!",
@@ -127,7 +125,7 @@ export default function HomeScreenMain() {
           [{ text: "Khám phá ngay" }]
         );
       }
-      
+
       if (userTier !== lastTier) {
         await SecureStore.setItemAsync('lastKnownTier', userTier);
       }
@@ -160,6 +158,7 @@ export default function HomeScreenMain() {
   useEffect(() => {
     isMounted.current = true;
     try {
+      Voice.removeAllListeners();
       Voice.onSpeechStart = () => { if (isMounted.current) setIsListening(true); };
       Voice.onSpeechEnd = () => { if (isMounted.current) setIsListening(false); };
       Voice.onSpeechPartialResults = (e) => {
@@ -192,18 +191,14 @@ export default function HomeScreenMain() {
           ToastAndroid.show('Không thể nhận diện giọng nói', ToastAndroid.SHORT);
         }
       };
-    } catch(err) {
+    } catch (err) {
       console.warn("Voice module not available yet", err);
     }
     return () => {
       isMounted.current = false;
       try {
-        Voice.onSpeechStart = () => {};
-        Voice.onSpeechEnd = () => {};
-        Voice.onSpeechResults = () => {};
-        Voice.onSpeechPartialResults = () => {};
-        Voice.onSpeechError = () => {};
-      } catch(err) {}
+        Voice.destroy().then(() => Voice.removeAllListeners());
+      } catch (err) { }
     };
   }, [searchMode]);
 
@@ -246,8 +241,9 @@ export default function HomeScreenMain() {
         }
       }
       try {
-        await Voice.stop();
-      } catch (err) {}
+        await Voice.cancel();
+        await Voice.destroy();
+      } catch (err) { }
 
       const isAvailable = await Voice.isAvailable().catch(() => false);
       if (!isAvailable) {
@@ -278,6 +274,7 @@ export default function HomeScreenMain() {
     try {
       setIsListening(false);
       await Voice.stop();
+      await Voice.destroy();
       if (voiceText) {
         const cleaned = cleanSearchQuery(voiceText);
         router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
@@ -298,7 +295,7 @@ export default function HomeScreenMain() {
     try {
       setLoadingAssistant(true);
       const data = await MealSuggestionService.getMenuAssistant(recipeId, portionsCount);
-      
+
       // Nếu không có nguyên liệu, ưu tiên dùng nguyên liệu đã được AI sinh từ trước
       if (!data.ingredients || data.ingredients.length === 0) {
         const recipeToUse = currentRecipe || selectedRecipe;
@@ -313,9 +310,30 @@ export default function HomeScreenMain() {
           // Fallback gọi AI (chỉ khi thực sự chưa có nguyên liệu)
           const rName = fallbackRecipeName || recipeToUse?.recipeName;
           if (rName) {
-             const aiData = await SearchService.recommendIngredients(rName);
-             if (aiData && aiData.ingredients && aiData.ingredients.length > 0) {
-               data.ingredients = aiData.ingredients.map((ing: any) => ({
+            let aiQuery = rName;
+            try {
+              const prefs = await PersonalizationService.getHealthPreferences();
+              const diets = Array.isArray(prefs?.preferreds) ? prefs.preferreds.map((p: any) => p.tagName) : [];
+              const allergiesList = [
+                ...(Array.isArray(prefs?.allergies) ? prefs.allergies : []),
+                ...(Array.isArray(prefs?.avoids) ? prefs.avoids : [])
+              ];
+              const allergies = allergiesList.map((p: any) => p.tagName);
+              if (diets.length > 0 || allergies.length > 0) {
+                aiQuery += ` (HƯỚNG DẪN 2 BƯỚC: Bước 1: Liệt kê ĐẦY ĐỦ nguyên liệu GỐC chuẩn truyền thống (không tự ý bỏ thịt/cá nếu món gốc có). Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU nguyên liệu gốc VI PHẠM, hãy set "isRestricted": true và điền tên sản phẩm chay/an toàn thay thế vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.)`;
+              }
+            } catch (e) {
+              console.warn('Lỗi lấy prefs:', e);
+            }
+
+            const aiData = await SearchService.recommendIngredients(aiQuery);
+            if (aiData && aiData.ingredients && aiData.ingredients.length > 0) {
+              data.ingredients = aiData.ingredients.map((ing: any) => {
+                let isRestricted = ing.isRestricted === true;
+                let altName = ing.altName || null;
+                let desc = ing.reason || ing.quantityText;
+
+                return {
                   productId: ing.productId,
                   productName: ing.productName,
                   unitPrice: ing.unitPrice,
@@ -323,10 +341,14 @@ export default function HomeScreenMain() {
                   quantityRequired: ing.quantity * (portionsCount / (recipeToUse?.yieldPortions || 2)),
                   unitOfMeasure: ing.quantityText || 'phần',
                   inStock: true,
-                  currentStock: 10
-               }));
-               data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
-             }
+                  currentStock: 10,
+                  isRestricted,
+                  altName,
+                  description: desc
+                };
+              });
+              data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
+            }
           }
         }
       }
@@ -354,28 +376,28 @@ export default function HomeScreenMain() {
       Alert.alert('Thông báo', 'Tất cả nguyên liệu cần thiết cho món ăn này hiện tại đều đã hết hàng.');
       return;
     }
-    
+
     try {
       setAddingToCart(true);
       // Add all available items in parallel
       await Promise.all(inStockItems.map(item => CartService.addItem(item.productId, Math.ceil(item.quantityRequired))));
-      
+
       setRecipeModalVisible(false);
-      
+
       Alert.alert(
         'Đã thêm vào giỏ hàng',
         `Đã thêm thành công ${inStockItems.length} nguyên liệu có sẵn vào giỏ hàng! Bạn có muốn mở Bản đồ Siêu thị để Robot dẫn đường đi gom đồ không?`,
         [
           { text: 'Để sau', style: 'cancel' },
-          { 
-            text: 'Đồng ý', 
+          {
+            text: 'Đồng ý',
             onPress: () => {
               const mockInvoice = {
                 items: inStockItems.map(i => ({ productName: i.productName })),
                 totalPrice: assistantData.estimatedTotalCost
               };
               const nodeIdsStr = assistantData.optimizedShoppingRoute ? assistantData.optimizedShoppingRoute.join(',') : '';
-              
+
               router.push({
                 pathname: '/map',
                 params: {
@@ -446,7 +468,7 @@ export default function HomeScreenMain() {
       if (profile?.memberId) {
         const ads = await MemberAdService.getSponsoredRecommendations(profile.memberId as number);
         setSponsoredAds(ads);
-        
+
         const deals = await ProductService.getDeals(profile.memberId as number);
         setSystemDeals(deals);
       } else {
@@ -489,7 +511,7 @@ export default function HomeScreenMain() {
     try {
       setLoadingMeals(true);
       const data = await PersonalizationService.getPersonalizedMeals();
-      
+
       const mealsWithIngredients = await Promise.all(
         data.map(async (meal: any) => {
           try {
@@ -498,18 +520,43 @@ export default function HomeScreenMain() {
             let estCost = assistantData.estimatedTotalCost || 0;
 
             if (finalIngredients.length === 0) {
-              const aiData = await SearchService.recommendIngredients(meal.recipeName);
+              let aiQuery = meal.recipeName;
+              try {
+                const prefs = await PersonalizationService.getHealthPreferences();
+                const diets = Array.isArray(prefs?.preferreds) ? prefs.preferreds.map((p: any) => p.tagName) : [];
+                const allergiesList = [
+                  ...(Array.isArray(prefs?.allergies) ? prefs.allergies : []),
+                  ...(Array.isArray(prefs?.avoids) ? prefs.avoids : [])
+                ];
+                const allergies = allergiesList.map((p: any) => p.tagName);
+                if (diets.length > 0 || allergies.length > 0) {
+                  aiQuery += ` (HƯỚNG DẪN 2 BƯỚC: Bước 1: Liệt kê ĐẦY ĐỦ nguyên liệu GỐC chuẩn truyền thống (không tự ý bỏ thịt/cá nếu món gốc có). Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU nguyên liệu gốc VI PHẠM, hãy set "isRestricted": true và điền tên sản phẩm chay/an toàn thay thế vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.)`;
+                }
+              } catch (e) {
+                console.warn('Lỗi lấy prefs:', e);
+              }
+
+              const aiData = await SearchService.recommendIngredients(aiQuery);
               if (aiData && aiData.ingredients && aiData.ingredients.length > 0) {
-                finalIngredients = aiData.ingredients.map((ing: any) => ({
-                  productId: ing.productId,
-                  productName: ing.productName,
-                  unitPrice: ing.unitPrice,
-                  imageUrl: ing.imageUrl,
-                  quantityRequired: ing.quantity,
-                  unitOfMeasure: ing.quantityText || 'phần',
-                  inStock: true,
-                  currentStock: 10
-                }));
+                finalIngredients = aiData.ingredients.map((ing: any) => {
+                  let isRestricted = ing.isRestricted === true;
+                  let altName = ing.altName || null;
+                  let desc = ing.reason || ing.quantityText;
+
+                  return {
+                    productId: ing.productId,
+                    productName: ing.productName,
+                    unitPrice: ing.unitPrice,
+                    imageUrl: ing.imageUrl,
+                    quantityRequired: ing.quantity,
+                    unitOfMeasure: ing.quantityText || 'phần',
+                    inStock: true,
+                    currentStock: 10,
+                    isRestricted,
+                    altName,
+                    description: desc
+                  };
+                });
                 estCost = finalIngredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
               }
             }
@@ -537,7 +584,7 @@ export default function HomeScreenMain() {
       ToastAndroid.show('Nguyên liệu đã hết hàng', ToastAndroid.SHORT);
       return;
     }
-    
+
     try {
       setAddingToCart(true);
       await Promise.all(inStockItems.map((item: any) => CartService.addItem(item.productId, Math.ceil(item.quantityRequired))));
@@ -706,7 +753,11 @@ export default function HomeScreenMain() {
                       <View style={{ marginBottom: 12 }}>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 }}>Nguyên liệu cần có:</Text>
                         <Text style={{ fontSize: 11, color: '#6B7280' }} numberOfLines={2}>
-                          {meal.ingredients.map((ing: any) => ing.productName).join(', ')}
+                          {meal.ingredients.map((ing: any, idx: number) => (
+                            <Text key={idx} style={{ color: ing.isRestricted ? '#DC2626' : '#6B7280' }}>
+                              {ing.productName}{ing.isRestricted ? ' (⚠️)' : ''}{idx < meal.ingredients!.length - 1 ? ', ' : ''}
+                            </Text>
+                          ))}
                         </Text>
                         {meal.estimatedTotalCost && (
                           <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#059669', marginTop: 4 }}>
@@ -719,8 +770,8 @@ export default function HomeScreenMain() {
                       <TouchableOpacity style={[styles.btnSecondary, { flex: 1, alignItems: 'center', paddingHorizontal: 4 }]} onPress={() => openRecipeAssistant(meal)}>
                         <Text style={[styles.btnSecondaryText, { fontSize: 11 }]} numberOfLines={1}>Xem trước</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[styles.btnPrimary, { flex: 1, flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 4 }, addingToCart && { opacity: 0.7 }]} 
+                      <TouchableOpacity
+                        style={[styles.btnPrimary, { flex: 1, flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 4 }, addingToCart && { opacity: 0.7 }]}
                         onPress={() => handleAddMealToCart(meal)}
                         disabled={addingToCart}
                       >
@@ -750,7 +801,7 @@ export default function HomeScreenMain() {
                 </View>
                 <View style={styles.smartCardFooter}>
                   <Text style={styles.smartCardDesc}>
-                    Ngân sách tuần: {profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa thiết lập'}
+                    Ngân sách tối đa: {profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa thiết lập'}
                   </Text>
                   <View style={styles.smartCardActions}>
                     <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/robots')}>
@@ -772,7 +823,7 @@ export default function HomeScreenMain() {
         <Animated.View entering={FadeInUp.delay(500)} style={styles.budgetSection}>
           <View style={styles.budgetHeader}>
             <View>
-              <Text style={styles.budgetTitle}>Ngân sách tuần</Text>
+              <Text style={styles.budgetTitle}>Chi tiêu tối đa</Text>
               <Text style={styles.budgetSubtitle}>Cập nhật 5 phút trước</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
@@ -851,9 +902,9 @@ export default function HomeScreenMain() {
                   <View style={styles.smartCardImageWrapper}>
                     <Image source={{ uri: ad.imageUrl }} style={styles.smartCardImage} />
                     {ad.allergyWarning && (
-                      <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(239,68,68,0.9)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexDirection: 'row', alignItems: 'center' }}>
-                        <AlertTriangle color="white" size={12} style={{ marginRight: 4 }} />
-                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>Dị ứng</Text>
+                      <View style={styles.restrictedBadge}>
+                        <AlertTriangle color="white" size={12} />
+                        <Text style={styles.restrictedText}>VI PHẠM</Text>
                       </View>
                     )}
                   </View>
@@ -893,6 +944,12 @@ export default function HomeScreenMain() {
                         <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>-{deal.discountPercent}%</Text>
                       </View>
                     ) : null}
+                    {deal.hasAllergenConflict && (
+                      <View style={styles.restrictedBadge}>
+                        <AlertTriangle color="white" size={12} />
+                        <Text style={styles.restrictedText}>VI PHẠM</Text>
+                      </View>
+                    )}
                   </View>
                   <View style={[styles.smartCardFooter, { padding: 12 }]}>
                     <Text style={[styles.smartCardTitle, { color: '#111827', fontSize: 14 }]} numberOfLines={2}>{deal.productName}</Text>
@@ -914,7 +971,7 @@ export default function HomeScreenMain() {
         {/* Promotions */}
         <Animated.View entering={FadeInUp.delay(600)} style={styles.promoSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Khuyến mãi dành cho bạn</Text>
+            <Text style={styles.sectionTitle}>Sản phẩm dành cho bạn</Text>
             <TouchableOpacity>
               <Text style={styles.viewAllText}>Xem tất cả</Text>
             </TouchableOpacity>
@@ -942,6 +999,12 @@ export default function HomeScreenMain() {
                       <Zap color="white" size={10} fill="white" style={{ marginRight: 4 }} />
                       <Text style={styles.aiRecommendText}>AI Đề xuất</Text>
                     </View>
+                    {(product as any).hasAllergenConflict && (
+                      <View style={styles.restrictedBadge}>
+                        <AlertTriangle color="white" size={12} />
+                        <Text style={styles.restrictedText}>VI PHẠM</Text>
+                      </View>
+                    )}
                   </View>
                   <View style={styles.productInfo}>
                     <Text style={styles.productTitle} numberOfLines={1}>{product.productName}</Text>
@@ -968,7 +1031,7 @@ export default function HomeScreenMain() {
             )}
 
             {/* View More Card */}
-            <TouchableOpacity style={styles.viewMoreCard} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.viewMoreCard} activeOpacity={0.8} onPress={() => router.push({ pathname: '/search', params: { mode: 'personal' } })}>
               <View style={styles.viewMoreIconBox}>
                 <Plus color="#059669" size={24} />
               </View>
@@ -1011,7 +1074,7 @@ export default function HomeScreenMain() {
       {isListening && (
         <View style={styles.voiceModalOverlay}>
           <View style={styles.voiceModalContent}>
-            <View style={{position: 'relative', width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 24}}>
+            <View style={{ position: 'relative', width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
               <RNAnimated.View style={[styles.voicePulseCircle, { transform: [{ scale: pulseAnim }] }]} />
               <View style={styles.voiceMicContainer}>
                 <Mic color="white" size={32} />
@@ -1093,10 +1156,28 @@ export default function HomeScreenMain() {
                           style={styles.ingredientImg}
                         />
                         <View style={styles.ingredientInfoBox}>
-                          <Text style={styles.ingredientNameText} numberOfLines={1}>{ing.productName}</Text>
+                          <Text style={[styles.ingredientNameText, ing.isRestricted && { color: '#DC2626' }]} numberOfLines={1}>
+                            {ing.productName}
+                          </Text>
                           <Text style={styles.ingredientQtyText}>
                             Yêu cầu: {ing.quantityRequired} {ing.unitOfMeasure} {ing.shelfLocation ? `• Kệ: ${ing.shelfLocation}` : ''}
                           </Text>
+                          {ing.isRestricted && (
+                            <TouchableOpacity
+                              style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, backgroundColor: '#FEF2F2', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6, flexWrap: 'wrap' }}
+                              onPress={() => {
+                                if (ing.altName) {
+                                  setRecipeModalVisible(false);
+                                  router.push({ pathname: '/search', params: { query: ing.altName, mode: 'personal' } });
+                                }
+                              }}
+                            >
+                              <AlertTriangle color="#DC2626" size={12} />
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#DC2626', marginLeft: 4 }}>
+                                ⚠️ Bấm để tìm thay thế: {ing.altName}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
                           <Text style={styles.ingredientPriceText}>{(ing.unitPrice * ing.quantityRequired).toLocaleString('vi-VN')} đ</Text>
@@ -1121,7 +1202,7 @@ export default function HomeScreenMain() {
                       {assistantData?.estimatedTotalCost ? assistantData.estimatedTotalCost.toLocaleString('vi-VN') + ' VNĐ' : '0 VNĐ'}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.recipeFooterActions}>
                     <TouchableOpacity style={styles.recipeCancelActionBtn} onPress={() => setRecipeModalVisible(false)}>
                       <Text style={styles.recipeCancelActionText}>Đóng</Text>
@@ -2025,7 +2106,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 12,
   },
   recipeLoadingText: {
     marginTop: 12,
@@ -2154,5 +2235,23 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '800',
+  },
+  restrictedBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#DC2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 4,
+    gap: 4,
+  },
+  restrictedText: {
+    color: 'white',
+    fontSize: 9,
+    fontFamily: 'Inter-Bold',
   }
 });
+

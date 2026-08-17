@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Award, Clock, Minus, Plus, ShieldCheck, ShoppingBag, Star, Bot } from 'lucide-react-native';
+import { ArrowLeft, Award, Clock, Minus, Plus, ShieldCheck, ShoppingBag, Star } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, ToastAndroid } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, ToastAndroid, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, {
   FadeInDown,
@@ -12,6 +12,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProductService, ProductDto } from '../../services/ProductService';
 import { CartService } from '../../services/CartService';
+import { SearchService } from '../../services/SearchService';
 
 const { width } = Dimensions.get('window');
 
@@ -40,7 +41,9 @@ export default function ProductDetailScreenMain() {
   const { id } = useLocalSearchParams();
   const [quantity, setQuantity] = useState(1);
   const [product, setProduct] = useState<ProductDto | null>(null);
+  const [alternatives, setAlternatives] = useState<ProductDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [restrictedWarning, setRestrictedWarning] = useState<string | null>(null);
 
   // Zoom animation to simulate shared element transition
   const scale = useSharedValue(0.22);
@@ -58,6 +61,24 @@ export default function ProductDetailScreenMain() {
       setIsLoading(true);
       const data = await ProductService.getProductDetail(productId);
       setProduct(data);
+      if (data && data.status === 'OutOfStock') {
+        const altData = await ProductService.getAlternatives(productId);
+        setAlternatives(altData || []);
+      }
+      
+      // Check dietary restriction
+      try {
+        if (data && data.productName) {
+          const pSearch = await SearchService.searchPersonalized({ q: data.productName, useAi: false });
+          const isAllowed = pSearch.results && pSearch.results.some((r: any) => r.productId.toString() === productId.toString());
+          if (pSearch.results && !isAllowed) {
+            setRestrictedWarning(`⚠️ CẢNH BÁO: Sản phẩm này vi phạm cài đặt dị ứng hoặc chế độ ăn hiện tại của bạn!`);
+          }
+        }
+      } catch (err) {
+        console.warn('Cannot check dietary restriction:', err);
+      }
+
       // start animation after load
       scale.value = withSpring(1, { damping: 18, stiffness: 200 });
       translateX.value = withSpring(0, { damping: 18, stiffness: 200 });
@@ -114,6 +135,11 @@ export default function ProductDetailScreenMain() {
         {/* Product Info */}
         <Animated.View entering={FadeInDown.delay(200)}>
           <View style={styles.infoContainer}>
+            {restrictedWarning && (
+              <View style={{ backgroundColor: '#FEF2F2', padding: 12, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#FECACA' }}>
+                <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '600' }}>{restrictedWarning}</Text>
+              </View>
+            )}
             <View style={styles.priceRow}>
               <Text style={styles.currentPrice}>{product?.unitPrice.toLocaleString('vi-VN')} đ</Text>
               {MOCK_EXTRA_DATA.originalPrice && (
@@ -187,6 +213,42 @@ export default function ProductDetailScreenMain() {
               </View>
             ))}
           </View>
+
+          {/* Alternatives when Out of Stock */}
+          {product?.status === 'OutOfStock' && alternatives.length > 0 && (
+            <View style={{ marginTop: 24 }}>
+              <Text style={styles.sectionTitle}>Sản phẩm thay thế cùng loại</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20, paddingHorizontal: 20 }}>
+                {alternatives.map((alt) => (
+                  <TouchableOpacity
+                    key={alt.productId}
+                    onPress={() => router.replace({ pathname: '/product', params: { id: alt.productId } })}
+                    style={{
+                      width: 140,
+                      marginRight: 16,
+                      backgroundColor: '#F8FAFC',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: '#E2E8F0',
+                      padding: 12,
+                    }}
+                  >
+                    <Image
+                      source={alt.imageUrl ? { uri: alt.imageUrl } : { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop' }}
+                      style={{ width: 114, height: 114, borderRadius: 8, marginBottom: 8 }}
+                      contentFit="cover"
+                    />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 4 }} numberOfLines={2}>
+                      {alt.productName}
+                    </Text>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#059669' }}>
+                      {alt.unitPrice.toLocaleString('vi-VN')} đ
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </Animated.View>
           </>
         ) : (
@@ -211,37 +273,30 @@ export default function ProductDetailScreenMain() {
         <View style={{ flexDirection: 'row', flex: 1, gap: 12, marginLeft: 16 }}>
           <TouchableOpacity
             onPress={() => {
-              if (product) {
-                router.push({
-                  pathname: '/navigation-map',
-                  params: { endObjectId: product.productId }
-                });
-              }
-            }}
-            activeOpacity={0.8}
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 16,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#EFF6FF',
-              borderWidth: 1,
-              borderColor: '#BFDBFE',
-            }}
-          >
-            <Bot color="#3B82F6" size={24} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={async () => {
-              try {
-                if (product) {
-                  await CartService.addItem(product.productId, quantity);
-                  ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
+              if (product?.status === 'OutOfStock') return;
+              
+              const addAction = async () => {
+                try {
+                  if (product) {
+                    await CartService.addItem(product.productId, quantity);
+                    ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
+                  }
+                } catch (e: any) {
+                  ToastAndroid.show(e.message || "Không thể thêm vào giỏ hàng", ToastAndroid.SHORT);
                 }
-              } catch (e: any) {
-                ToastAndroid.show(e.message, ToastAndroid.LONG);
+              };
+
+              if (restrictedWarning) {
+                Alert.alert(
+                  "Cảnh báo chế độ ăn",
+                  "Sản phẩm này chứa thành phần vi phạm cài đặt dị ứng hoặc chế độ ăn hiện tại của bạn. Bạn có chắc chắn muốn thêm vào giỏ hàng?",
+                  [
+                    { text: "Hủy", style: "cancel" },
+                    { text: "Vẫn thêm", onPress: addAction, style: "destructive" }
+                  ]
+                );
+              } else {
+                addAction();
               }
             }}
             activeOpacity={0.8}
@@ -253,11 +308,13 @@ export default function ProductDetailScreenMain() {
               justifyContent: 'center',
               flexDirection: 'row',
               gap: 8,
-              backgroundColor: '#059669',
+              backgroundColor: product?.status === 'OutOfStock' ? '#CBD5E1' : '#059669',
             }}
           >
             <ShoppingBag color="white" size={20} />
-            <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
+            <Text style={styles.addToCartText}>
+              {product?.status === 'OutOfStock' ? 'Tạm hết hàng' : 'Thêm vào giỏ'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
