@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 15, color: '#6B7280' },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 16 },
   gridItem: { width: '47%', borderRadius: 24, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, backgroundColor: 'white' },
-  borderContainer: { ...StyleSheet.absoluteFillObject, borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  borderContainer: { ...StyleSheet.absoluteFill, borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   gradientBorder: { width: '150%', height: '150%', position: 'absolute' },
   innerContent: { flex: 1, margin: 2, backgroundColor: 'white', borderRadius: 22, padding: 10, alignItems: 'center' },
   innerContentSelected: { backgroundColor: '#F0FDF4' },

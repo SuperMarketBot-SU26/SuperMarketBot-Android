@@ -1,11 +1,10 @@
 import Voice from '@react-native-voice/voice';
-import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { AlertTriangle, Bell, Bot, CheckCircle2, Home, Lock, Map, Mic, Plus, Search, ShoppingBag, ShoppingCart, Sparkles, User, X, Zap } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { default as React, default as React, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -417,17 +416,15 @@ export default function HomeScreenMain() {
     }
   };
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
       checkConnectedRobot();
       refreshProfile();
       fetchProducts();
       fetchSponsoredAds();
       fetchCartTotal();
-    }
-  }, [isFocused, searchMode]);
+    }, [searchMode])
+  );
 
   const fetchCartTotal = async () => {
     try {
@@ -597,11 +594,11 @@ export default function HomeScreenMain() {
     }
   };
 
-  useEffect(() => {
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
       fetchMeals();
-    }
-  }, [isFocused]);
+    }, [])
+  );
 
   const spendingLimit = profile?.spendingLimit || 0;
   const budgetPercentage = spendingLimit > 0 ? Math.min((cartTotal / spendingLimit) * 100, 100) : 0;
@@ -1467,7 +1464,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   smartCardOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
     padding: 16,
   },

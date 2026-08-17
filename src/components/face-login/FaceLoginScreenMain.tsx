@@ -204,9 +204,9 @@ export default function FaceLoginScreenMain() {
             <View style={[styles.ovalContainer, { borderColor: frameColor }]}>
               <View style={styles.cameraOval}>
                 {permission?.granted ? (
-                  <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="front" />
+                  <CameraView ref={cameraRef} style={{ flex: 1, width: '100%', height: '100%' }} facing="front" />
                 ) : (
-                  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#111' }]} />
+                  <View style={[{ flex: 1, width: '100%', height: '100%' }, { backgroundColor: '#111' }]} />
                 )}
                 <ScanLine active={status === 'scanning'} color={frameColor} />
 
@@ -224,7 +224,7 @@ export default function FaceLoginScreenMain() {
                 {/* Soft white flash overlay */}
                 <Animated.View
                   style={[
-                    StyleSheet.absoluteFillObject,
+                    { flex: 1, width: '100%', height: '100%' },
                     { backgroundColor: 'white', borderRadius: OVAL_W / 2 },
                     flashStyle,
                   ]}
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   cornerTR: { top: -6, right: -6, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 8 },
   cornerBL: { bottom: -6, left: -6, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 8 },
   cornerBR: { bottom: -6, right: -6, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 8 },
-  resultOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  resultOverlay: { ...{ flex: 1, width: '100%', height: '100%' }, justifyContent: 'center', alignItems: 'center' },
   statusBox: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: 15, fontWeight: '600' },
