@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { AlertTriangle, Bell, Bot, CheckCircle2, Home, Lock, Map, Mic, Plus, Search, ShoppingBag, ShoppingCart, Sparkles, User, X, Zap } from 'lucide-react-native';
-import { default as React, default as React, useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
