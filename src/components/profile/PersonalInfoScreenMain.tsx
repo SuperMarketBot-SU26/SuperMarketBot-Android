@@ -102,7 +102,7 @@ export default function PersonalInfoScreenMain() {
 
       // Update avatar / face if a new image was picked or deleted
       if (imageBase64 && imageUrl) {
-        await ProfileService.uploadAvatar(imageUrl);
+        await ProfileService.uploadAvatar(imageUrl, imageBase64);
         setImageBase64(null); // Clear after upload
         setIsAvatarDeleted(false);
         updateGlobalAvatarVersion(); // Bust cache for remote image

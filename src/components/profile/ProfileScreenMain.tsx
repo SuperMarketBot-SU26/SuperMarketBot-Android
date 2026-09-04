@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { CheckCircle2, Clock, Home, Leaf, LogOut, Map, Medal, PartyPopper, QrCode, Settings, ShoppingBag, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User } from 'lucide-react-native';
+import { Camera, CheckCircle2, Clock, Home, Leaf, LogOut, Map, Medal, PartyPopper, QrCode, Settings, ShoppingBag, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User } from 'lucide-react-native';
 import React, { useState, useCallback } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -78,12 +78,16 @@ export default function ProfileScreenMain() {
 
           {/* User Info */}
           <Animated.View entering={FadeInDown.delay(100)} style={styles.userInfoSection}>
-            <View style={styles.avatarContainer}>
+            <TouchableOpacity 
+              style={styles.avatarContainer}
+              activeOpacity={0.8}
+              onPress={() => router.push('/personal-info')}
+            >
               <Image source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }} style={styles.avatar} />
-              <View style={styles.verifiedBadge}>
-                <CheckCircle2 color="white" size={12} fill="#16A34A" />
+              <View style={[styles.verifiedBadge, { backgroundColor: '#059669' }]}>
+                <Camera color="white" size={12} />
               </View>
-            </View>
+            </TouchableOpacity>
             <View style={styles.userDetails}>
               <Text style={styles.userName}>{profile?.fullName || 'Đang tải...'}</Text>
               <View style={styles.userTierRow}>

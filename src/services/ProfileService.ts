@@ -100,10 +100,33 @@ export class ProfileService {
     return response.json();
   }
 
-  static async uploadAvatar(imageUri: string): Promise<string> {
+  static async uploadAvatar(imageUri: string, base64?: string | null): Promise<string> {
     const token = await SecureStore.getItemAsync('userToken');
+
+    // Nếu có chuỗi base64, gửi JSON trực tiếp (ổn định hơn trên Android)
+    if (base64) {
+      console.log(`[ProfileService.uploadAvatar] Sending JSON base64 to PUT ${BASE_URL}/api/members/me/avatar`);
+      const response = await fetch(`${BASE_URL}/api/members/me/avatar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[ProfileService.uploadAvatar] Base64 Error:`, errorText);
+        throw new Error(`Tải ảnh lên thất bại (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.avatarUrl;
+    }
     
-    // Tạo FormData
+    // Fallback: Tạo FormData multipart
     const formData = new FormData();
     const filename = imageUri.split('/').pop() || 'avatar.jpg';
     const match = /\.(\w+)$/.exec(filename);
