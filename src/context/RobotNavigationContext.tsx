@@ -30,6 +30,7 @@ import {
   RobotNavigationStatusDto,
   RobotStatusSignalRDto,
 } from '../services/RobotService';
+import { NavigationService } from '../services/NavigationService';
 import { useAuth } from './AuthContext';
 
 // --- Types -------------------------------------------------------------------
@@ -268,16 +269,27 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
       targetNodeNameRef.current = nodeName;
 
       try {
-        await RobotService.navigateRobot({
-          robotCode,
-          destinationNodeId: nodeId.toString(),
-        });
+        try {
+          // Chuẩn firmware mới: POST /api/v1/navigation/dispatch-autonomous (flowType='guide')
+          await NavigationService.dispatchAutonomous({
+            robotCode,
+            flowType: 'guide',
+            nodeIds: [nodeId],
+          });
+        } catch (dispatchErr) {
+          console.warn('[RobotNavigationContext] dispatchAutonomous failed, trying fallback navigateRobot:', dispatchErr);
+          await RobotService.navigateRobot({
+            robotCode,
+            destinationNodeId: nodeId.toString(),
+          });
+        }
+
         setRobotNavState('MOVING');
-        addToast(`Robot dang di chuyen den ${nodeName}...`, 'info');
-        return { success: true, message: `Da gui lenh di chuyen toi ${nodeName}.` };
+        addToast(`Robot đang di chuyển đến ${nodeName}...`, 'info');
+        return { success: true, message: `Đã gửi lệnh di chuyển tới ${nodeName}.` };
       } catch (err: any) {
         setRobotNavState('ERROR');
-        const msg = err?.message || 'Gui lenh that bai.';
+        const msg = err?.message || 'Gửi lệnh thất bại.';
         addToast(msg, 'error');
         setTimeout(() => setRobotNavState('IDLE'), 2000);
         return { success: false, message: msg };

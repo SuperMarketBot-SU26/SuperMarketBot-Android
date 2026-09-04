@@ -108,15 +108,29 @@ export class NavigationService {
   static async optimizeShoppingRoute(
     productIds: number[],
     startX: number = 7.25,
-    startY: number = 8.6
+    startY: number = 8.6,
+    robotId?: number,
+    startNodeId?: number
   ): Promise<OptimizeShoppingRouteResponseDto> {
     const token = await this.getToken();
     const url = `${BASE_URL}/api/Navigation/optimize-shopping-route`;
-    const payload = {
-      robotId: 1, // Add dummy robotId to pass BE validation
-      startNodeId: 10033, // NodeID of waypoint 8
+    const payload: {
+      robotId: number;
+      productIds: number[];
+      startX?: number;
+      startY?: number;
+      startNodeId?: number;
+    } = {
+      robotId: robotId ?? 1,
       productIds,
+      startX,
+      startY,
     };
+
+    if (startNodeId !== undefined && startNodeId > 0) {
+      payload.startNodeId = startNodeId;
+    }
+
     console.log('[NavigationService] optimizeShoppingRoute payload:', payload);
 
     const response = await fetch(url, {
