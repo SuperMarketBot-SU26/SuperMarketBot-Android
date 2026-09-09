@@ -45,6 +45,9 @@ export interface RoutePoint {
   y: number;
   nodeId: number | null;
   description: string;
+  productId?: number;
+  productName?: string;
+  nodeName?: string;
 }
 
 export interface RouteResponse {
@@ -58,7 +61,7 @@ export class MapService {
     console.log(`[MapService.getLatestMap] GET ${BASE_URL}/api/v1/maps/latest?floorId=${floorId}`);
     const response = await fetch(`${BASE_URL}/api/v1/maps/latest?floorId=${floorId}`, {
       method: 'GET',
-      headers: { 
+      headers: {
         'Accept': 'application/json',
         'ngrok-skip-browser-warning': 'true'
       }
@@ -78,7 +81,7 @@ export class MapService {
     if (endNodeId !== undefined) {
       url += `&endNodeId=${endNodeId}`;
     }
-    
+
     console.log(`[MapService.getRoute] GET ${url}`);
     const response = await fetch(url, {
       method: 'GET',

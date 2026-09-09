@@ -1,4 +1,4 @@
-﻿export const MAP_HTML = `<!DOCTYPE html>
+export const MAP_HTML = `<!DOCTYPE html>
 <html lang="vi">
 
 <head>
@@ -280,31 +280,31 @@
 
     // Shelves: separate H+V near corners (corner empty), KV1 center, KV4 vertical
     const SHELVES = [
-      // KV3 Amber â€” TOP-LEFT area (corner is EMPTY, shelves offset ~0.5m from walls)
+      // KV3 Amber — TOP-LEFT area (corner is EMPTY, shelves offset ~0.5m from walls)
       { id: 'kv3-h', label: 'KV3', x: 1.2, y: 0.5, w: 2, h: 0.65, fill: '#FEF3C7', stroke: '#F59E0B', lc: '#92400E' },
       { id: 'kv3-v', label: 'KV3', x: 0.5, y: 1.4, w: 0.65, h: 1.7, fill: '#FEF3C7', stroke: '#F59E0B', lc: '#92400E' },
 
-      // KV2 Blue â€” TOP-RIGHT area (corner is EMPTY, shelves offset ~0.5m from walls)
+      // KV2 Blue — TOP-RIGHT area (corner is EMPTY, shelves offset ~0.5m from walls)
       { id: 'kv2-h', label: 'KV2', x: 5.7, y: 0.5, w: 2, h: 0.65, fill: '#DBEAFE', stroke: '#3B82F6', lc: '#1E3A8A' },
       { id: 'kv2-v', label: 'KV2', x: 7.85, y: 1.4, w: 0.65, h: 1.7, fill: '#DBEAFE', stroke: '#3B82F6', lc: '#1E3A8A' },
 
-      // KV1 Orange â€” DEAD CENTER
+      // KV1 Orange — DEAD CENTER
       { id: 'kv1-c', label: 'KV1', x: 3.5, y: 4.15, w: 2.0, h: 0.7, fill: '#FFEDD5', stroke: '#F97316', lc: '#9A3412' },
 
-      // KV4 Purple â€” BOTTOM-LEFT (vertical, ~1.2m gap)
+      // KV4 Purple — BOTTOM-LEFT (vertical, ~1.2m gap)
       { id: 'kv4-a', label: 'KV4', x: 0.5, y: 6.8, w: 0.7, h: 1.6, fill: '#EDE9FE', stroke: '#8B5CF6', lc: '#4C1D95' },
       { id: 'kv4-b', label: 'KV4', x: 2.4, y: 6.8, w: 0.7, h: 1.6, fill: '#EDE9FE', stroke: '#8B5CF6', lc: '#4C1D95' },
     ];
 
-    // Door: bottom-right of south wall
-    const DOOR = { x: 6.5, w: 1.5, wall: 'south' };
+    // Door: bottom-left of south wall
+    const DOOR = { x: 1.0, w: 1.5, wall: 'south' };
 
     // Robot initial position (starts at door)
     let robot = { x: DOOR.x + DOOR.w / 2, y: STORE_H - 0.4 };
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ————————————————————————————————————————————————————————————————————————
     // CANVAS + SCALE
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ————————————————————————————————————————————————————————————————————————
     const canvas = document.getElementById('map-canvas');
     const ctx = canvas.getContext('2d');
     let ppm = 70;  // pixels per meter
@@ -577,26 +577,110 @@
       document.getElementById('robot-y').textContent = robot.y.toFixed(2) + ' m';
     }
 
-    function drawMap() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawFloor();
-      drawGrid();
-      drawAxisLabels();
-      drawShelves();
-      drawWalls();
-      drawDoor();
-      drawScaleBar();
-      drawRobot();
-    }
+    function drawRoute() {
+        if (!waypoints || waypoints.length === 0) return;
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Draw Polyline
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)'; // Green route
+        ctx.lineWidth = 4;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.setLineDash([8, 8]); // Dashed line for route
+        
+        ctx.moveTo(px(waypoints[0].x), py(waypoints[0].y));
+        for (let i = 1; i < waypoints.length; i++) {
+          ctx.lineTo(px(waypoints[i].x), py(waypoints[i].y));
+        }
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset line dash
+
+        // Draw Target Markers (waypoints with products)
+        const time = Date.now();
+        const pulseRatio = (Math.sin(time / 200) + 1) / 2; // 0 to 1
+        
+        waypoints.forEach((wp, index) => {
+          if (wp.productId != null || index === 0 || index === waypoints.length - 1) {
+            const wx = px(wp.x);
+            const wy = py(wp.y);
+            const R = pm(0.4); // Marker radius
+
+            // Glow for products
+            if (wp.productId != null) {
+              const grad = ctx.createRadialGradient(wx, wy, R * 0.5, wx, wy, R * (2 + pulseRatio));
+              grad.addColorStop(0, 'rgba(239, 68, 68, 0.6)'); // Red glow
+              grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+              ctx.fillStyle = grad;
+              ctx.beginPath();
+              ctx.arc(wx, wy, R * 3, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            // Marker body
+            ctx.fillStyle = index === 0 ? '#3B82F6' : (wp.productId != null ? '#EF4444' : '#10B981');
+            ctx.beginPath();
+            ctx.arc(wx, wy, R, 0, Math.PI * 2);
+            ctx.fill();
+
+            // White border
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.stroke();
+          }
+        });
+      }
+
+    function drawMap() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawFloor();
+        drawGrid();
+        drawAxisLabels();
+        drawShelves();
+        drawWalls();
+        drawDoor();
+        drawScaleBar();
+        drawRoute();
+        drawRobot();
+      }
+
+    // ————————————————————————————————————————————————————————————————————————————————
     // ROBOT ANIMATION
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ————————————————————————————————————————————————————————————————————————————————
     let waypoints = [];
     let wpIdx = 0;
     let animating = false;
     const SPEED = 0.8; // m/s
     let lastTS = null;
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.clientX - rect.left;
+      const clientY = e.clientY - rect.top;
+      
+      const R = pm(0.4); // marker radius on screen
+      const hitRadius = R * 1.5; // add some padding for easier clicking
+      
+      for (let i = 0; i < waypoints.length; i++) {
+        const wp = waypoints[i];
+        if (wp.productId != null || i === 0 || i === waypoints.length - 1) {
+          const wx = px(wp.x);
+          const wy = py(wp.y);
+          const dist = Math.hypot(clientX - wx, clientY - wy);
+          
+          if (dist <= hitRadius) {
+            // Send message to React Native
+            const payload = JSON.stringify({
+              type: 'SHELF_CLICKED',
+              payload: { nodeId: wp.nodeId, nodeName: wp.nodeName }
+            });
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(payload);
+            }
+            break; // Stop checking after finding the clicked marker
+          }
+        }
+      }
+    });
 
     function loop(ts) {
       requestAnimationFrame(loop);
@@ -624,16 +708,16 @@
       drawMap();
     }
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ————————————————————————————————————————————————————————————————————————————————
     // BACKEND CONNECTIVITY
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ————————————————————————————————————————————————————————————————————————————————
     const BE_URL = 'http://localhost:5000';
 
     async function checkBE() {
       const pill = document.getElementById('api-status');
       const txt = document.getElementById('api-status-text');
       try {
-        const r = await fetch(\`\${BE_URL}/api/Robots\`);
+        const r = await fetch(BE_URL + '/api/Robots');
         if (r.ok) {
           pill.className = 'status-pill online';
           txt.textContent = 'BE Online';
@@ -645,9 +729,9 @@
     }
     checkBE();
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ————————————————————————————————————————————————————————————————————————————————
     // PUBLIC BRIDGE API
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ————————————————————————————————————————————————————————————————————————————————
     /** Teleport robot to absolute position (meters) */
     window.setRobotPosition = function (data) {
       if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { } }
@@ -662,12 +746,17 @@
      * Compatible with the old 3D index.html bridge.
      */
     window.setRouteData = function (data) {
-      if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { } }
-      if (!data || !data.waypoints || !data.waypoints.length) return;
-      waypoints = data.waypoints.map(w => ({ x: Number(w.x), y: Number(w.y) }));
-      wpIdx = 0;
-      animating = true;
-    };
+        if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { } }
+        if (!data || !data.waypoints || !data.waypoints.length) return;
+        // Keep the full waypoint data (including productId, nodeId, nodeName, etc)
+        waypoints = data.waypoints.map(w => ({
+          ...w,
+          x: Number(w.x),
+          y: Number(w.y)
+        }));
+        wpIdx = 0;
+        animating = true;
+      };
 
     function onMsg(event) {
       try {

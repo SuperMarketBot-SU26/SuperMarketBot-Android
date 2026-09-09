@@ -1,14 +1,14 @@
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Camera, ChevronLeft, Edit2, Home, Mail, Map, MapPin, Phone, ShoppingBag, User, User as UserIcon, Lock } from 'lucide-react-native';
+import { ArrowRight, Camera, ChevronLeft, Home, Lock, Mail, Map, Phone, ShoppingBag, User, User as UserIcon } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth, updateGlobalAvatarVersion } from '../../context/AuthContext';
+import { updateGlobalAvatarVersion, useAuth } from '../../context/AuthContext';
 import { AuthService } from '../../services/AuthService';
-import { ProfileService, ProfileDto } from '../../services/ProfileService';
-import * as ImagePicker from 'expo-image-picker';
+import { ProfileDto, ProfileService } from '../../services/ProfileService';
 
 export default function PersonalInfoScreenMain() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function PersonalInfoScreenMain() {
   const { user, token, profile, refreshProfile } = useAuth();
 
   const [isChangePassModalVisible, setChangePassModalVisible] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
+  const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isChangePassLoading, setIsChangePassLoading] = useState(false);
 
@@ -36,7 +36,7 @@ export default function PersonalInfoScreenMain() {
     if (profile) {
       setFullName(profile.fullName || user?.fullName || '');
       setPhoneNumber(profile.phone || '');
-      
+
       // Chỉ cập nhật imageUrl từ mạng nếu user chưa chọn ảnh mới từ thư viện (imageBase64 null)
       // hoặc nếu url thay đổi sau khi lưu.
       setImageUrl(profile.avatarUrl || profile.facePath || null);
@@ -75,14 +75,14 @@ export default function PersonalInfoScreenMain() {
       'Bạn muốn làm gì?',
       [
         { text: 'Hủy', style: 'cancel' },
-        { 
-          text: 'Xóa ảnh', 
+        {
+          text: 'Xóa ảnh',
           onPress: () => {
             setImageUrl(null);
             setImageBase64(null);
             setIsAvatarDeleted(true);
-          }, 
-          style: 'destructive' 
+          },
+          style: 'destructive'
         },
         { text: 'Chọn ảnh mới', onPress: handlePickImage },
       ]
@@ -96,25 +96,26 @@ export default function PersonalInfoScreenMain() {
         fullName,
         phone: phoneNumber,
       };
-      
+
       // Update basic info (name, phone)
       await ProfileService.updateProfile(data);
 
       // Update avatar / face if a new image was picked or deleted
+      let avatarChanged = false;
       if (imageBase64 && imageUrl) {
         await ProfileService.uploadAvatar(imageUrl, imageBase64);
         setImageBase64(null); // Clear after upload
         setIsAvatarDeleted(false);
-        updateGlobalAvatarVersion(); // Bust cache for remote image
+        avatarChanged = true;
       } else if (isAvatarDeleted) {
         await ProfileService.deleteAvatar();
         setIsAvatarDeleted(false);
-        updateGlobalAvatarVersion();
+        avatarChanged = true;
       }
 
       // Refresh global profile to sync avatar
-      await refreshProfile();
-      
+      await refreshProfile(avatarChanged);
+
       Alert.alert('Thành công', 'Cập nhật thông tin cá nhân thành công!');
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Cập nhật thất bại.');
@@ -124,40 +125,32 @@ export default function PersonalInfoScreenMain() {
   };
 
   const handleChangePasswordRequest = async () => {
-    if (!user?.email) {
-      Alert.alert('Lỗi', 'Không tìm thấy email của bạn.');
+    setChangePassModalVisible(true);
+  };
+
+  const handleSubmitNewPassword = async () => {
+    if (!oldPassword || !newPassword) {
+      Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ mật khẩu cũ và mật khẩu mới.');
       return;
     }
+    if (!token) return;
+
     setIsChangePassLoading(true);
     try {
-      await AuthService.forgotPassword(user.email);
-      setChangePassModalVisible(true);
+      await AuthService.changePassword(oldPassword, newPassword, token);
+      Alert.alert('Thành công', 'Đổi mật khẩu thành công!');
+      setChangePassModalVisible(false);
+      setOldPassword('');
+      setNewPassword('');
     } catch (error: any) {
-      Alert.alert('Lỗi', error.message || 'Không thể gửi yêu cầu đổi mật khẩu.');
+      Alert.alert('Lỗi', error.message || 'Lỗi đổi mật khẩu.');
     } finally {
       setIsChangePassLoading(false);
     }
   };
 
-  const handleSubmitNewPassword = async () => {
-    if (!otpCode || !newPassword) {
-      Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ mã OTP và mật khẩu mới.');
-      return;
-    }
-    if (!user?.email) return;
-
-    setIsChangePassLoading(true);
-    try {
-      await AuthService.resetPassword(user.email, otpCode, newPassword);
-      Alert.alert('Thành công', 'Đổi mật khẩu thành công!');
-      setChangePassModalVisible(false);
-      setOtpCode('');
-      setNewPassword('');
-    } catch (error: any) {
-      Alert.alert('Lỗi', error.message || 'Lỗi đặt lại mật khẩu.');
-    } finally {
-      setIsChangePassLoading(false);
-    }
+  const handleRegisterFace = () => {
+    router.push('/face-update');
   };
 
   return (
@@ -255,19 +248,6 @@ export default function PersonalInfoScreenMain() {
                 </>
               )}
 
-              {/* Order History Button */}
-              <TouchableOpacity style={styles.inputContainer} onPress={() => router.push('/order-history')}>
-                <View style={[styles.iconBox, { backgroundColor: '#F0FDF4' }]}>
-                  <ShoppingBag color="#059669" size={20} />
-                </View>
-                <View style={styles.inputContent}>
-                  <Text style={[styles.inputValue, { color: '#059669' }]}>Lịch sử đơn hàng</Text>
-                </View>
-                <View style={styles.editBtn}>
-                  <ChevronLeft color="#059669" size={18} style={{ transform: [{ rotate: '180deg' }] }} />
-                </View>
-              </TouchableOpacity>
-
               {/* Change Password Button */}
               <TouchableOpacity style={styles.inputContainer} onPress={handleChangePasswordRequest}>
                 <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
@@ -278,6 +258,19 @@ export default function PersonalInfoScreenMain() {
                 </View>
                 <View style={styles.editBtn}>
                   {isChangePassLoading && !isChangePassModalVisible ? <ActivityIndicator size="small" color="#DC2626" /> : <ChevronLeft color="#DC2626" size={18} style={{ transform: [{ rotate: '180deg' }] }} />}
+                </View>
+              </TouchableOpacity>
+
+              {/* Cập nhật khuôn mặt Button */}
+              <TouchableOpacity style={styles.inputContainer} onPress={handleRegisterFace}>
+                <View style={[styles.iconBox, { backgroundColor: '#E0F2FE' }]}>
+                  <Camera color="#0284C7" size={20} />
+                </View>
+                <View style={styles.inputContent}>
+                  <Text style={[styles.inputValue, { color: '#0284C7' }]}>Cập nhật khuôn mặt</Text>
+                </View>
+                <View style={styles.editBtn}>
+                  <ChevronLeft color="#0284C7" size={18} style={{ transform: [{ rotate: '180deg' }] }} />
                 </View>
               </TouchableOpacity>
 
@@ -295,8 +288,6 @@ export default function PersonalInfoScreenMain() {
                   </>
                 )}
               </TouchableOpacity>
-
-              <Text style={styles.updateStatusText}>Cập nhật lần cuối: 15/10/2023</Text>
             </Animated.View>
 
           </ScrollView>
@@ -305,15 +296,14 @@ export default function PersonalInfoScreenMain() {
           <Modal visible={isChangePassModalVisible} transparent animationType="fade" onRequestClose={() => setChangePassModalVisible(false)}>
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Xác nhận OTP</Text>
-                <Text style={styles.modalSubtitle}>Chúng tôi đã gửi mã OTP tới email {user?.email}.</Text>
-                
+                <Text style={styles.modalTitle}>Đổi mật khẩu</Text>
+
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="Mã OTP"
-                  value={otpCode}
-                  onChangeText={setOtpCode}
-                  keyboardType="number-pad"
+                  placeholder="Mật khẩu cũ"
+                  secureTextEntry
+                  value={oldPassword}
+                  onChangeText={setOldPassword}
                 />
                 <TextInput
                   style={styles.modalInput}
@@ -322,7 +312,7 @@ export default function PersonalInfoScreenMain() {
                   value={newPassword}
                   onChangeText={setNewPassword}
                 />
-                
+
                 <TouchableOpacity style={styles.modalBtnPrimary} onPress={handleSubmitNewPassword} disabled={isChangePassLoading}>
                   {isChangePassLoading ? <ActivityIndicator color="white" /> : <Text style={styles.modalBtnPrimaryText}>Xác nhận</Text>}
                 </TouchableOpacity>

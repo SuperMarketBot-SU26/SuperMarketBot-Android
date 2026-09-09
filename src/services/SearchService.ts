@@ -16,6 +16,7 @@ export interface SearchResultItemDto {
   healthTags: string[];
   isRestricted?: boolean;
   altName?: string | null;
+  isOverBudget?: boolean;
 }
 
 export interface SearchResponseDto {

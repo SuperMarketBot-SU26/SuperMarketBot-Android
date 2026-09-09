@@ -1,11 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { Camera, CheckCircle2, Clock, Home, Leaf, LogOut, Map, Medal, PartyPopper, QrCode, Settings, ShoppingBag, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User } from 'lucide-react-native';
-import React, { useState, useCallback } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Camera, CheckCircle2, Clock, Home, Leaf, LogOut, Map, Medal, PartyPopper, QrCode, Settings, ShoppingBag, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User, Wifi } from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ProfileService, ProfileDto } from '../../services/ProfileService';
+import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 
 const getTierTheme = (tier: string) => {
@@ -65,16 +65,16 @@ export default function ProfileScreenMain() {
         colors={['#F8FAFC', '#F8FAFC']}
         style={styles.container}
       >
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Hồ sơ</Text>
-          <TouchableOpacity style={styles.settingsBtn}>
-            <Settings color="#6B7280" size={24} />
-          </TouchableOpacity>
-        </View>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Hồ sơ</Text>
+            <TouchableOpacity style={styles.settingsBtn}>
+              <Settings color="#6B7280" size={24} />
+            </TouchableOpacity>
+          </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {/* User Info */}
           <Animated.View entering={FadeInDown.delay(100)} style={styles.userInfoSection}>
@@ -97,146 +97,172 @@ export default function ProfileScreenMain() {
             </View>
           </Animated.View>
 
-          {/* Membership Card */}
-          <Animated.View entering={FadeInDown.delay(200)}>
-            {(() => {
-              const theme = getTierTheme(profile?.membershipTier || '');
-              return (
-                <LinearGradient
-                  colors={theme.colors as unknown as [string, string]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.membershipCard, { borderColor: 'transparent' }]}
-                >
-                  <View style={styles.cardHeader}>
-                    <View>
-                      <Text style={[styles.cardSuperTitle, { color: theme.textColor, opacity: 0.8 }]}>{theme.superTitle}</Text>
-                      <Text style={[styles.cardTitle, { color: theme.textColor, fontWeight: '700' }]}>{theme.title}</Text>
+            {/* Membership Card */}
+            <Animated.View entering={FadeInDown.delay(200)}>
+              {(() => {
+                const theme = getTierTheme(profile?.membershipTier || '');
+                return (
+                  <LinearGradient
+                    colors={theme.colors as unknown as [string, string]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.membershipCard, { overflow: 'hidden', minHeight: 200, padding: 24, justifyContent: 'space-between', borderColor: 'transparent', position: 'relative' }]}
+                  >
+                    {/* Wave Pattern Background */}
+                    <View style={{ position: 'absolute', top: -50, right: -50, opacity: 0.1 }}>
+                      <Svg width="300" height="300" viewBox="0 0 200 200">
+                        <Path fill="#FFFFFF" d="M45,-23C59.6,-4.9,73.6,12.7,69.5,25.9C65.5,39.2,43.5,48.1,23.3,55.9C3.1,63.6,-15.4,70.2,-31.2,65.2C-47,60.1,-60.2,43.3,-64.9,23.6C-69.6,3.9,-65.7,-18.8,-53.4,-36C-41.2,-53.1,-20.6,-64.7,-1.8,-62.9C17,-61,30.3,-41.2,45,-23Z" transform="translate(100 100)" />
+                      </Svg>
                     </View>
-                    <View style={styles.qrIconBox}>
-                      <QrCode color={theme.textColor} size={24} />
+                    <View style={{ position: 'absolute', bottom: -100, left: -50, opacity: 0.1 }}>
+                      <Svg width="250" height="250" viewBox="0 0 200 200">
+                        <Path fill="#FFFFFF" d="M41.5,-63.9C52.6,-53.4,59.5,-38.7,66.1,-23.4C72.7,-8.1,79,7.9,75.1,21.8C71.3,35.7,57.3,47.4,42.5,56.8C27.6,66.2,11.8,73.4,-3.8,78.7C-19.4,84,-34.8,87.4,-47.9,80.1C-61,72.9,-71.8,55.1,-78.3,36.5C-84.8,17.9,-87,-1.5,-80.6,-17.7C-74.2,-34,-59.1,-47.2,-44.1,-56.9C-29.2,-66.6,-14.6,-72.7,0.7,-73.7C16,-74.7,30.4,-74.5,41.5,-63.9Z" transform="translate(100 100)" />
+                      </Svg>
                     </View>
-                  </View>
 
-                  <View style={styles.cardPointsRow}>
-                    <View>
-                      <Text style={[styles.pointsLabel, { color: theme.textColor, opacity: 0.7 }]}>Tổng chi tiêu</Text>
-                      <Text style={[styles.pointsValue, { color: theme.textColor }]}>
-                        {profile?.totalSpent !== undefined ? profile.totalSpent.toLocaleString('vi-VN') : '0'}{' '}
-                        <Text style={[styles.pointsUnit, { color: theme.textColor }]}>đ</Text>
+                    {/* Top Row: Chip & Contactless */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View style={{
+                        width: 45, height: 32, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
+                        justifyContent: 'center', alignItems: 'center', overflow: 'hidden'
+                      }}>
+                        <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(255,255,255,0.3)', position: 'absolute', top: 10 }} />
+                        <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(255,255,255,0.3)', position: 'absolute', bottom: 10 }} />
+                        <View style={{ width: 1, height: '100%', backgroundColor: 'rgba(255,255,255,0.3)', position: 'absolute', left: 15 }} />
+                        <View style={{ width: 1, height: '100%', backgroundColor: 'rgba(255,255,255,0.3)', position: 'absolute', right: 15 }} />
+                        <View style={{ width: 20, height: 16, borderRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }} />
+                      </View>
+                      <Wifi color={theme.textColor} size={28} style={{ transform: [{ rotate: '90deg' }], opacity: 0.8 }} />
+                    </View>
+
+                    {/* Middle Row: Title (Card Number equivalent) */}
+                    <View style={{ marginTop: 24 }}>
+                      <Text style={{ color: theme.textColor, fontWeight: '800', fontSize: 20, letterSpacing: 2, textTransform: 'uppercase', textShadowColor: 'rgba(0,0,0,0.1)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }}>
+                        {theme.superTitle}
+                      </Text>
+                      <Text style={{ color: theme.textColor, opacity: 0.8, fontSize: 11, letterSpacing: 1.5, marginTop: 4 }}>
+                        {theme.title}
                       </Text>
                     </View>
-                  </View>
 
-                  <View style={styles.cardFooter}>
-                    <Text style={[styles.expiryText, { color: theme.textColor, opacity: 0.6 }]}>Hết hạn: 31/12/2026</Text>
-                    <TouchableOpacity style={[styles.btnRedeem, { backgroundColor: theme.textColor }]}>
-                      <Text style={[styles.btnRedeemText, { color: theme.textColor === '#FFFFFF' ? '#006064' : '#FFFFFF' }]}>Đổi thưởng</Text>
-                    </TouchableOpacity>
-                  </View>
-                </LinearGradient>
-              );
-            })()}
-          </Animated.View>
+                    {/* Bottom Row: Name & Points */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 32 }}>
+                      <View style={{ flex: 1, paddingRight: 10 }}>
+                        <Text style={{ color: theme.textColor, opacity: 0.7, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Chủ thẻ</Text>
+                        <Text style={{ color: theme.textColor, fontSize: 15, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }} numberOfLines={1}>
+                          {profile?.fullName || 'THÀNH VIÊN'}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ color: theme.textColor, opacity: 0.7, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Tổng chi tiêu</Text>
+                        <Text style={{ color: theme.textColor, fontSize: 20, fontWeight: '700' }}>
+                          {profile?.totalSpent !== undefined ? profile.totalSpent.toLocaleString('vi-VN') : '0'}<Text style={{ fontSize: 14 }}> đ</Text>
+                        </Text>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                );
+              })()}
+            </Animated.View>
 
-          {/* Account Menu */}
-          <Animated.View entering={FadeInDown.delay(300)} style={styles.menuSection}>
-            <Text style={styles.sectionTitle}>TÀI KHOẢN</Text>
+            {/* Account Menu */}
+            <Animated.View entering={FadeInDown.delay(300)} style={styles.menuSection}>
+              <Text style={styles.sectionTitle}>TÀI KHOẢN</Text>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/personal-info')}>
-              <View style={styles.menuIconBox}>
-                <User color="#4B5563" size={20} />
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/personal-info')}>
+                <View style={styles.menuIconBox}>
+                  <User color="#4B5563" size={20} />
+                </View>
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuItemTitle}>Thông tin cá nhân</Text>
+                  <Text style={styles.menuItemSub}>Quản lý thông tin & bảo mật</Text>
+                </View>
+                <ChevronRightIcon />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  if (profile?.membershipTier?.toLowerCase() !== 'premium') {
+                    alert('Tính năng này chỉ dành cho thành viên Premium (chi tiêu trên 10,000,000đ)');
+                  } else {
+                    router.push('/shopping-preferences');
+                  }
+                }}
+              >
+                <View style={styles.menuIconBox}>
+                  <SlidersHorizontal color="#4B5563" size={20} />
+                </View>
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuItemTitle}>Thiết lập cá nhân hoá</Text>
+                  <Text style={styles.menuItemSub}>Chỉnh sửa sở thích & ngân sách</Text>
+                </View>
+                <ChevronRightIcon />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/member-tier')}>
+                <View style={[styles.menuIconBox, { backgroundColor: '#ECFDF5' }]}>
+                  <Medal color="#059669" size={20} />
+                </View>
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuItemTitle}>Hạng thành viên</Text>
+                  <Text style={styles.menuItemSub}>Xem lộ trình thăng hạng & đặc quyền Bạch Kim</Text>
+                </View>
+                <ChevronRightIcon />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/order-history')}>
+                <View style={styles.menuIconBox}>
+                  <Clock color="#4B5563" size={20} />
+                </View>
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuItemTitle}>Lịch sử đơn hàng</Text>
+                  <Text style={styles.menuItemSub}>Theo dõi các đơn hàng đã đặt</Text>
+                </View>
+                <ChevronRightIcon />
+              </TouchableOpacity>
+            </Animated.View>
+
+
+
+            {/* Logout Button */}
+            <Animated.View entering={FadeInUp.delay(500)} style={styles.logoutSection}>
+              <TouchableOpacity style={styles.btnLogout} onPress={() => setLogoutModalVisible(true)}>
+                <LogOut color="#DC2626" size={20} style={{ marginRight: 8 }} />
+                <Text style={styles.btnLogoutText}>Đăng xuất</Text>
+              </TouchableOpacity>
+            </Animated.View>
+
+          </ScrollView>
+
+          {/* Bottom Navigation */}
+          <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/home')}>
+              <View style={styles.navTabBox}>
+                <Home color="#9CA3AF" size={24} />
               </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuItemTitle}>Thông tin cá nhân</Text>
-                <Text style={styles.menuItemSub}>Quản lý thông tin & bảo mật</Text>
-              </View>
-              <ChevronRightIcon />
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.menuItem} 
-              onPress={() => {
-                if (profile?.membershipTier?.toLowerCase() !== 'premium') {
-                  alert('Tính năng này chỉ dành cho thành viên Premium (chi tiêu trên 10,000,000đ)');
-                } else {
-                  router.push('/shopping-preferences');
-                }
-              }}
-            >
-              <View style={styles.menuIconBox}>
-                <SlidersHorizontal color="#4B5563" size={20} />
+            <TouchableOpacity style={styles.navItem} onPress={() => router.push('/map')}>
+              <View style={styles.navTabBox}>
+                <Map color="#9CA3AF" size={24} />
               </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuItemTitle}>Thiết lập cá nhân hoá</Text>
-                <Text style={styles.menuItemSub}>Chỉnh sửa sở thích & ngân sách</Text>
-              </View>
-              <ChevronRightIcon />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/member-tier')}>
-              <View style={[styles.menuIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <Medal color="#059669" size={20} />
+            <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/cart')}>
+              <View style={styles.navTabBox}>
+                <ShoppingBagIcon color="#9CA3AF" size={24} />
               </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuItemTitle}>Hạng thành viên</Text>
-                <Text style={styles.menuItemSub}>Xem lộ trình thăng hạng & đặc quyền Bạch Kim</Text>
-              </View>
-              <ChevronRightIcon />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/order-history')}>
-              <View style={styles.menuIconBox}>
-                <Clock color="#4B5563" size={20} />
+            <TouchableOpacity style={styles.navItem}>
+              <View style={[styles.navTabBox, styles.navTabBoxActive]}>
+                <User color="white" size={24} />
               </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuItemTitle}>Lịch sử đơn hàng</Text>
-                <Text style={styles.menuItemSub}>Theo dõi các đơn hàng đã đặt</Text>
-              </View>
-              <ChevronRightIcon />
             </TouchableOpacity>
-          </Animated.View>
+          </View>
 
-
-
-          {/* Logout Button */}
-          <Animated.View entering={FadeInUp.delay(500)} style={styles.logoutSection}>
-            <TouchableOpacity style={styles.btnLogout} onPress={() => setLogoutModalVisible(true)}>
-              <LogOut color="#DC2626" size={20} style={{ marginRight: 8 }} />
-              <Text style={styles.btnLogoutText}>Đăng xuất</Text>
-            </TouchableOpacity>
-          </Animated.View>
-
-        </ScrollView>
-
-        {/* Bottom Navigation */}
-        <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/home')}>
-            <View style={styles.navTabBox}>
-              <Home color="#9CA3AF" size={24} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/map')}>
-            <View style={styles.navTabBox}>
-              <Map color="#9CA3AF" size={24} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/cart')}>
-            <View style={styles.navTabBox}>
-              <ShoppingBagIcon color="#9CA3AF" size={24} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navItem}>
-            <View style={[styles.navTabBox, styles.navTabBoxActive]}>
-              <User color="white" size={24} />
-            </View>
-          </TouchableOpacity>
-        </View>
-
-      </SafeAreaView>
+        </SafeAreaView>
       </LinearGradient>
 
       {/* Logout Confirmation Modal */}

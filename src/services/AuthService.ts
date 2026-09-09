@@ -1,5 +1,5 @@
 const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
-export const BASE_URL = ENV_API_URL || 'https://interiorly-pinnatisect-adalyn.ngrok-free.dev';
+export const BASE_URL = ENV_API_URL || 'https://semiyearly-deloise-unsourly.ngrok-free.dev';
 
 console.log('[AuthService] EXPO_PUBLIC_API_URL env =', ENV_API_URL);
 console.log('[AuthService] BASE_URL =', BASE_URL);
@@ -144,6 +144,25 @@ export class AuthService {
     if (!response.ok) {
       const { rawText, data } = await parseErrorBody(response);
       console.error(`[AuthService.resetPassword] Error body (${response.status}):`, rawText);
+      throw new Error(data.error || data.detail || data.title || data.message || `Đổi mật khẩu thất bại (${response.status})`);
+    }
+    return true;
+  }
+  static async changePassword(oldPassword: string, newPassword: string, token: string): Promise<true> {
+    console.log(`[AuthService.changePassword] POST ${BASE_URL}/api/auth/change-password`);
+    const response = await fetch(`${BASE_URL}/api/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'ngrok-skip-browser-warning': 'true'
+      },
+      body: JSON.stringify({ oldPassword, newPassword }),
+    });
+    console.log(`[AuthService.changePassword] status: ${response.status}`);
+    if (!response.ok) {
+      const { rawText, data } = await parseErrorBody(response);
+      console.error(`[AuthService.changePassword] Error body (${response.status}):`, rawText);
       throw new Error(data.error || data.detail || data.title || data.message || `Đổi mật khẩu thất bại (${response.status})`);
     }
     return true;

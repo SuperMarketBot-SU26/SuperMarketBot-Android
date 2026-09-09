@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.0",
+    "@react-native-ml-kit/text-recognition": "^2.0.0",
     "@react-native-voice/voice": "^3.2.3",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.10",

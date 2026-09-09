@@ -17,7 +17,7 @@ export interface CartItemDto {
   quantity: number;
   totalPrice: number;
   imageUrl: string | null;
-  alertType: 'Allergy' | 'Avoid' | null;
+  alertType: 'Allergy' | 'Avoid' | 'Budget' | null;
   alertMessage: string | null;
   alternativeProducts: AlternativeProductDto[];
 }
@@ -147,10 +147,11 @@ export class CartService {
     return true;
   }
 
-  static async checkout(): Promise<any> {
+  static async checkout(startNodeId?: number): Promise<any> {
     const token = await SecureStore.getItemAsync('userToken');
-    console.log(`[CartService.checkout] POST ${BASE_URL}/api/cart/checkout`);
-    const response = await fetch(`${BASE_URL}/api/cart/checkout`, {
+    const url = startNodeId ? `${BASE_URL}/api/cart/checkout?startNodeId=${startNodeId}` : `${BASE_URL}/api/cart/checkout`;
+    console.log(`[CartService.checkout] POST ${url}`);
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

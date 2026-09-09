@@ -142,9 +142,9 @@ export class ProfileService {
     const response = await fetch(`${BASE_URL}/api/members/me/avatar`, {
       method: 'PUT',
       headers: {
+        'Content-Type': 'multipart/form-data',
         'ngrok-skip-browser-warning': 'true',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        // KHÔNG set Content-Type, fetch sẽ tự động set boundaries cho multipart/form-data
       },
       body: formData,
     });

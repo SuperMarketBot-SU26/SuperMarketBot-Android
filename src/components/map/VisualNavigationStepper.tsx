@@ -68,11 +68,25 @@ export default function VisualNavigationStepper({
     }
   };
 
+  if (!steps || steps.length === 0) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <X size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 16, fontWeight: '700', color: '#64748B', textAlign: 'center' }}>
+          Chưa có các bước hướng dẫn hình ảnh.
+        </Text>
+      </View>
+    );
+  }
+
   const renderItem = ({ item, index }: { item: NavigationStep; index: number }) => {
+    const fallbackImage = 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop';
     return (
       <View style={styles.cardContainer}>
         <View style={styles.card}>
-          <Image source={{ uri: item.imageUrl }} style={styles.image} resizeMode="cover" />
+          <Image source={{ uri: item.imageUrl || fallbackImage }} style={styles.image} resizeMode="cover" />
           
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.8)']}
@@ -109,6 +123,7 @@ export default function VisualNavigationStepper({
       </View>
     );
   };
+
 
   return (
     <View style={styles.container}>

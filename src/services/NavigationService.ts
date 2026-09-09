@@ -226,4 +226,26 @@ export class NavigationService {
       throw new Error(errorMsg);
     }
   }
+
+  /**
+   * AI Vision OCR: Trích xuất NodeId Kệ từ hình ảnh base64 chụp từ Camera
+   */
+  static async ocrShelfTag(imageBase64: string): Promise<{ success: boolean; nodeId?: number; message?: string }> {
+    const token = await this.getToken();
+    const url = `${BASE_URL}/api/v1/navigation/ocr-shelf-tag`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ imageBase64 }),
+    });
+
+    if (!response.ok) {
+      return { success: false, message: `Lỗi kết nối OCR (${response.status})` };
+    }
+    return response.json();
+  }
 }
+

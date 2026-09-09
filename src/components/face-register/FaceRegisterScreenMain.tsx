@@ -102,7 +102,7 @@ export default function FaceRegisterScreenMain() {
   }, [isDone]);
 
   const doCapture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || typeof cameraRef.current?.takePictureAsync !== 'function') return;
     setStatus('processing');
     try {
       if (!token) throw new Error('Phiên đăng nhập hết hạn. Vui lòng thử lại.');

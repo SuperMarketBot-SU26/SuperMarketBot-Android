@@ -1,8 +1,9 @@
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { Bell, Home, Map, Minus, Plus, ShoppingBag, Trash2, User, Zap, AlertTriangle, AlertCircle } from 'lucide-react-native';
-import React, { useCallback, useState, useEffect } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { AlertTriangle, Check, Home, Map, Minus, Plus, ShoppingBag, Trash2, User, Zap } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   FadeInDown,
@@ -16,13 +17,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
-import * as signalR from '@microsoft/signalr';
-import { CartService, CartDto, CartItemDto } from '../../services/CartService';
-import { ProfileService, ProfileDto } from '../../services/ProfileService';
-import { BASE_URL } from '../../services/AuthService';
 import { useNotification } from '../../context/NotificationContext';
-
+import { CartDto, CartItemDto, CartService } from '../../services/CartService';
+import { NavigationService } from '../../services/NavigationService';
+import { ProfileDto, ProfileService } from '../../services/ProfileService';
 const DELETE_THRESHOLD = -120; // vuốt qua ngưỡng này → tự xóa
 const REVEAL_THRESHOLD = -75;  // vuốt qua ngưỡng này → lộ nút đỏ
 
@@ -116,18 +114,20 @@ function SwipeableCartItem({
               <View style={styles.itemDetails}>
                 <Text style={styles.itemName} numberOfLines={1}>{item.productName}</Text>
                 <Text style={styles.itemVariant}>Đơn giá: {formatPrice(item.unitPrice)}</Text>
-                
+
                 {item.alertType && (
                   <View style={[
-                    styles.alertBadge, 
-                    item.alertType === 'Allergy' ? styles.alertAllergy : styles.alertAvoid
+                    styles.alertBadge,
+                    item.alertType === 'Allergy' ? styles.alertAllergy :
+                      item.alertType === 'Budget' ? styles.alertBudget : styles.alertAvoid
                   ]}>
                     <Text style={styles.alertBadgeText}>
-                      {item.alertType === 'Allergy' ? 'Cảnh báo Dị ứng' : 'Cần tránh'}
+                      {item.alertType === 'Allergy' ? 'Cảnh báo Dị ứng' :
+                        item.alertType === 'Budget' ? 'Vượt ngân sách' : 'Cần tránh'}
                     </Text>
                   </View>
                 )}
-                
+
                 <Text style={styles.itemPrice}>{formatPrice(item.totalPrice)}</Text>
               </View>
               <View style={styles.quantityControls}>
@@ -153,7 +153,9 @@ function SwipeableCartItem({
 
             {item.alternativeProducts && item.alternativeProducts.length > 0 && (
               <View style={styles.alternativesContainer}>
-                <Text style={styles.alternativesTitle}>Sản phẩm thay thế an toàn:</Text>
+                <Text style={styles.alternativesTitle}>
+                  {item.alertType === 'Budget' ? 'Sản phẩm thay thế (Rẻ hơn):' : 'Sản phẩm thay thế an toàn:'}
+                </Text>
                 {item.alternativeProducts.map(alt => (
                   <View key={alt.productId} style={styles.altItem}>
                     <Image
@@ -165,7 +167,7 @@ function SwipeableCartItem({
                       <Text style={styles.altReason} numberOfLines={1}>{alt.reason || 'Sản phẩm thay thế an toàn cho bạn.'}</Text>
                       <Text style={styles.altPrice}>{formatPrice(alt.unitPrice)}</Text>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.altReplaceBtn}
                       onPress={() => onReplaceAlternative(item.productId, alt.productId, item.quantity)}
                     >
@@ -185,7 +187,7 @@ function SwipeableCartItem({
 export default function CartScreenMain() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
+
   const [profile, setProfile] = useState<ProfileDto | null>(null);
   const [cart, setCart] = useState<CartDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -201,7 +203,7 @@ export default function CartScreenMain() {
       setLoading(true);
       const profileData = await ProfileService.getProfile();
       setProfile(profileData);
-      
+
       const cartData = await CartService.getCart();
       setCart(cartData);
     } catch (err) {
@@ -212,6 +214,76 @@ export default function CartScreenMain() {
   };
 
   // Lắng nghe SignalR Hub để đồng bộ Real-time
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScanningLocation, setIsScanningLocation] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isLocationOptionVisible, setIsLocationOptionVisible] = useState(false);
+  const [customAlert, setCustomAlert] = useState<{ visible: boolean, message: string, type: 'success' | 'error' }>({ visible: false, message: '', type: 'success' });
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const cameraRef = React.useRef<CameraView | null>(null);
+
+  useEffect(() => {
+    if (!isScanningLocation) {
+      setIsCameraReady(false);
+    }
+  }, [isScanningLocation]);
+
+  const captureAndProcessOcr = async () => {
+    if (!cameraRef.current || isOcrProcessing) return;
+
+    if (!isCameraReady || typeof cameraRef.current?.takePictureAsync !== 'function') {
+      setCustomAlert({
+        visible: true,
+        message: 'Camera đang khởi động, vui lòng đợi trong giây lát rồi thử lại!',
+        type: 'error'
+      });
+      return;
+    }
+
+    try {
+      setIsOcrProcessing(true);
+      console.log('Đang chụp ảnh tem dán Kệ để AI phân tích...');
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.65,
+        skipProcessing: false,
+      });
+
+      if (photo?.base64) {
+        const res = await NavigationService.ocrShelfTag(photo.base64);
+        console.log('🤖 [AI OCR] Kết quả Gemini OCR:', res);
+        if (res.success && res.nodeId) {
+          setIsScanningLocation(false);
+          setCustomAlert({
+            visible: true,
+            message: `✨ AI đã đọc thành công tem: ${res.message || 'Kệ ' + res.nodeId}! Bắt đầu tính toán lộ trình...`,
+            type: 'success'
+          });
+          performCheckout(res.nodeId);
+          return;
+        } else {
+          setCustomAlert({
+            visible: true,
+            message: `⚠️ AI chưa đọc được chữ trên tem Kệ trong ảnh. Vui lòng căn chỉnh góc chụp vuông góc, rõ nét ("ARUCO ID: X" hoặc "KỆ X") hoặc chọn nhanh số Kệ ở bên dưới!`,
+            type: 'error'
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[AI OCR] Snap error:', err);
+      setCustomAlert({
+        visible: true,
+        message: 'Lỗi khi chụp ảnh từ Camera: ' + (err as Error).message,
+        type: 'error'
+      });
+    } finally {
+      setIsOcrProcessing(false);
+    }
+  };
+
+
+
+
   useFocusEffect(
     useCallback(() => {
       fetchProfileAndCart();
@@ -224,9 +296,9 @@ export default function CartScreenMain() {
         console.log('[SignalR CartUpdate]', updatedCart);
         setCart(updatedCart);
       };
-      
+
       hubConnection.on('CartUpdate', handleCartUpdate);
-      
+
       return () => {
         hubConnection.off('CartUpdate', handleCartUpdate);
       };
@@ -265,28 +337,39 @@ export default function CartScreenMain() {
       // Thêm sản phẩm thay thế với số lượng cũ
       const updatedCart = await CartService.addItem(newProductId, quantity);
       setCart(updatedCart);
-      alert('Đã đổi sang sản phẩm thay thế an toàn hơn.');
+      setCustomAlert({ visible: true, message: 'Đã đổi sang sản phẩm thay thế an toàn hơn.', type: 'success' });
     } catch (error) {
       console.error('Error replacing alternative product:', error);
-      alert('Không thể thay thế sản phẩm: ' + (error as Error).message);
+      setCustomAlert({ visible: true, message: 'Không thể thay thế sản phẩm: ' + (error as Error).message, type: 'error' });
     }
   }, []);
 
-  const handleCheckout = async () => {
+  const performCheckout = async (startNodeId?: number) => {
+    const effectiveStartNodeId = startNodeId ?? 7;
+    console.log('\n======================================================');
+    console.log('🛒 [BẤM CHỈ ĐƯỜNG TRONG GIỎ HÀNG]');
+    console.log(`📍 Vị trí bắt đầu (Start Node ID): ${effectiveStartNodeId} (${effectiveStartNodeId === 7 ? 'Quầy Thu Ngân - Node 7' : 'Kệ Hàng Scanned QR - Node ' + effectiveStartNodeId})`);
+
     try {
       setCheckingOut(true);
       let checkoutResult: any = null;
       try {
-        checkoutResult = await CartService.checkout();
+        console.log('📡 Gửi API Cart.checkout với startNodeId:', effectiveStartNodeId);
+        checkoutResult = await CartService.checkout(effectiveStartNodeId);
+        console.log('📥 Kết quả Cart.checkout từ BE:', JSON.stringify(checkoutResult, null, 2));
       } catch (err) {
         console.warn('Cart checkout BE API error:', err);
       }
-      
+
       const ids = cart?.items ? cart.items.map(i => i.productId) : [];
+      console.log('📦 Chuyển hướng sang màn hình Bản đồ với Product IDs:', ids, 'và StartNodeId:', effectiveStartNodeId);
+      console.log('======================================================\n');
+
       router.push({
         pathname: '/map' as any,
         params: {
           productIds: JSON.stringify(ids),
+          startNodeId: String(effectiveStartNodeId),
           routePlan: checkoutResult ? JSON.stringify(checkoutResult.waypoints || checkoutResult.routePlan || checkoutResult) : '[]',
           invoice: checkoutResult ? JSON.stringify(checkoutResult.invoice || checkoutResult) : '{}'
         }
@@ -294,10 +377,60 @@ export default function CartScreenMain() {
     } catch (error) {
       console.error('Error during checkout:', error);
       const ids = cart?.items ? cart.items.map(i => i.productId) : [];
-      router.push({ pathname: '/map' as any, params: { productIds: JSON.stringify(ids) } });
+      router.push({ pathname: '/map' as any, params: { productIds: JSON.stringify(ids), startNodeId: String(effectiveStartNodeId) } });
     } finally {
       setCheckingOut(false);
     }
+  };
+
+
+
+  const handleCheckout = async () => {
+    setIsLocationOptionVisible(true);
+  };
+
+  const startCameraScan = async () => {
+    setIsLocationOptionVisible(false);
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        alert("Cần cấp quyền Camera để quét mã QR vị trí.");
+        return;
+      }
+    }
+    setIsScanningLocation(true);
+  };
+
+  const startFromCashier = () => {
+    setIsLocationOptionVisible(false);
+    console.log('🏬 Người dùng chọn xuất phát từ: QUẦY THU NGÂN (Node 7)');
+    performCheckout(7); // NodeID 7 is Checkout/Cashier
+  };
+
+  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+    setIsScanningLocation(false);
+    console.log('📷 Đã quét mã QR Kệ hàng thành công! Data:', data);
+
+    let nodeId: number | undefined = undefined;
+    const raw = (data || '').toUpperCase();
+
+    const nodeMatch = raw.match(/NODE[\s:_#-]*(\d+)/i);
+    const shelfMatch = raw.match(/SHELF[\s:_#-]*(\d+)/i);
+    const idMatch = raw.match(/(?:ARUCO\s*)?ID[\s:_#-]*(\d+)/i);
+    const keMatch = raw.match(/(?:KỆ|KE|KV)[\s:_#-]*(\d+)/i);
+    const numMatch = raw.match(/(\d+)/);
+
+    if (nodeMatch) nodeId = parseInt(nodeMatch[1], 10);
+    else if (shelfMatch) nodeId = parseInt(shelfMatch[1], 10);
+    else if (idMatch) nodeId = parseInt(idMatch[1], 10);
+    else if (keMatch) nodeId = parseInt(keMatch[1], 10);
+    else if (numMatch) {
+      const parsedNum = parseInt(numMatch[1], 10);
+      if (!isNaN(parsedNum) && parsedNum >= 1 && parsedNum <= 8) nodeId = parsedNum;
+    }
+
+    console.log(`📍 Node ID gán từ mã QR: ${nodeId ?? 'Không xác định (dùng Node 7)'}`);
+    performCheckout(nodeId);
   };
 
   return (
@@ -325,7 +458,7 @@ export default function CartScreenMain() {
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              
+
               {/* Cảnh báo cấp giỏ hàng (ví dụ: Vượt ngân sách) */}
               {cart?.alertMessage && (
                 <View style={styles.budgetBanner}>
@@ -338,20 +471,24 @@ export default function CartScreenMain() {
               {cart?.remainingBudget !== null && cart?.remainingBudget !== undefined && (
                 <View style={styles.budgetContainer}>
                   <View style={styles.budgetHeader}>
-                    <Text style={styles.budgetLabel}>Ngân sách còn lại:</Text>
+                    <Text style={[styles.budgetLabel, cart.remainingBudget < 0 && { color: '#EF4444' }]}>
+                      {cart.remainingBudget < 0 ? 'Vượt ngân sách:' : 'Ngân sách còn lại:'}
+                    </Text>
                     <Text style={[styles.budgetValue, cart.remainingBudget < 0 && { color: '#EF4444' }]}>
-                      {formatPrice(cart.remainingBudget)}
+                      {cart.remainingBudget < 0
+                        ? formatPrice(Math.abs(cart.remainingBudget))
+                        : formatPrice(cart.remainingBudget)}
                     </Text>
                   </View>
                   <View style={styles.budgetBarBackground}>
-                    <View 
+                    <View
                       style={[
-                        styles.budgetBarFill, 
-                        { 
+                        styles.budgetBarFill,
+                        {
                           width: `${Math.max(0, Math.min(100, (cart.remainingBudget / 1000000) * 100))}%`,
-                          backgroundColor: cart.remainingBudget < 0 ? '#EF4444' : '#059669' 
+                          backgroundColor: cart.remainingBudget < 0 ? '#EF4444' : '#059669'
                         }
-                      ]} 
+                      ]}
                     />
                   </View>
                 </View>
@@ -405,10 +542,10 @@ export default function CartScreenMain() {
           )}
 
           {/* Bottom Action */}
-          {cart?.items && cart.items.length > 0 && !loading && (
-            <Animated.View entering={FadeInUp.delay(600)} style={styles.bottomAction}>
-              <TouchableOpacity 
-                style={[styles.btnCheckout, checkingOut && { opacity: 0.8 }]} 
+          <Animated.View entering={FadeInUp.delay(600)} style={styles.bottomAction}>
+            {cart?.items && cart.items.length > 0 && !loading && (
+              <TouchableOpacity
+                style={[styles.btnCheckout, checkingOut && { opacity: 0.8 }, { marginBottom: 12 }]}
                 onPress={handleCheckout}
                 disabled={checkingOut}
               >
@@ -418,8 +555,10 @@ export default function CartScreenMain() {
                   <Text style={styles.btnCheckoutText}>Xem lộ trình & Chỉ đường</Text>
                 )}
               </TouchableOpacity>
-            </Animated.View>
-          )}
+            )}
+
+
+          </Animated.View>
 
           {/* Bottom Navigation */}
           <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -449,6 +588,186 @@ export default function CartScreenMain() {
           </View>
 
         </SafeAreaView>
+
+        {/* Location Option Modal */}
+        <Modal visible={isLocationOptionVisible} transparent={true} animationType="fade" onRequestClose={() => setIsLocationOptionVisible(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: 'white', padding: 24, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 16 }}>Chọn vị trí hiện tại của bạn</Text>
+              <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 24 }}>Hệ thống cần biết vị trí của bạn để tính toán đường đi ngắn nhất.</Text>
+
+              <TouchableOpacity onPress={startFromCashier} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', padding: 16, borderRadius: 16, marginBottom: 12 }}>
+                <View style={{ width: 48, height: 48, backgroundColor: '#E0E7FF', borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 }}>
+                  <Map color="#4F46E5" size={24} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827' }}>Quầy thu ngân</Text>
+                  <Text style={{ fontSize: 13, color: '#6B7280' }}>Bắt đầu đi từ khu vực cửa ra vào</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={startCameraScan} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', padding: 16, borderRadius: 16, marginBottom: 24 }}>
+                <View style={{ width: 48, height: 48, backgroundColor: '#D1FAE5', borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 }}>
+                  <Zap color="#059669" size={24} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827' }}>Chụp ảnh tem Kệ </Text>
+                  <Text style={{ fontSize: 13, color: '#6B7280' }}>Chụp tem dán kệ</Text>
+                </View>
+              </TouchableOpacity>
+
+
+              <TouchableOpacity onPress={() => setIsLocationOptionVisible(false)} style={{ alignItems: 'center', paddingVertical: 12 }}>
+                <Text style={{ color: '#EF4444', fontWeight: '600', fontSize: 15 }}>Hủy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Custom Alert Modal */}
+        <Modal visible={customAlert.visible} transparent={true} animationType="fade" onRequestClose={() => setCustomAlert({ ...customAlert, visible: false })}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <Animated.View entering={FadeInDown.springify()} style={{ backgroundColor: 'white', borderRadius: 20, padding: 24, width: '100%', maxWidth: 340, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+              <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: customAlert.type === 'success' ? '#D1FAE5' : '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+                {customAlert.type === 'success' ? (
+                  <Check color="#059669" size={32} />
+                ) : (
+                  <AlertTriangle color="#DC2626" size={32} />
+                )}
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 8, textAlign: 'center' }}>
+                {customAlert.type === 'success' ? 'Thành công' : 'Lỗi'}
+              </Text>
+              <Text style={{ fontSize: 14, color: '#4B5563', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+                {customAlert.message}
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: customAlert.type === 'success' ? '#059669' : '#DC2626', width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}
+                onPress={() => setCustomAlert({ ...customAlert, visible: false })}
+              >
+                <Text style={{ color: 'white', fontSize: 15, fontWeight: '700' }}>Xác nhận</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </Modal>
+
+        {/* AI Camera Photo Capture Modal */}
+        <Modal visible={isScanningLocation} animationType="slide" onRequestClose={() => setIsScanningLocation(false)}>
+          <View style={{ flex: 1, backgroundColor: 'black' }}>
+            <SafeAreaView style={{ flex: 1, position: 'relative' }}>
+              <CameraView
+                ref={(ref) => {
+                  cameraRef.current = ref;
+                }}
+                style={{ flex: 1 }}
+                facing="back"
+                onCameraReady={() => setIsCameraReady(true)}
+              />
+              {/* Header Banner Guide */}
+              <View style={{
+                position: 'absolute', top: 50, left: 20, right: 20,
+                backgroundColor: 'rgba(15, 23, 42, 0.85)', padding: 16, borderRadius: 20, alignItems: 'center'
+              }}>
+                <Text style={{ color: '#10B981', fontSize: 15, fontWeight: '800', marginBottom: 4, textAlign: 'center' }}>
+                  CHỤP ẢNH TEM DÁN KỆ HÀNG
+                </Text>
+                <Text style={{ color: 'white', fontSize: 13, textAlign: 'center', fontWeight: '600', lineHeight: 18 }}>
+                  Đưa camera vào tem in trên kệ rồi bấm nút Chụp bên dưới.
+                </Text>
+              </View>
+
+              {/* Shutter Capture Button Container */}
+              <View style={{
+                position: 'absolute', bottom: 170, left: 0, right: 0,
+                alignItems: 'center', justifyContent: 'center'
+              }}>
+                <TouchableOpacity
+                  onPress={captureAndProcessOcr}
+                  disabled={isOcrProcessing}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: isOcrProcessing ? '#64748B' : '#059669',
+                    paddingVertical: 14,
+                    paddingHorizontal: 28,
+                    borderRadius: 30,
+                    borderWidth: 3,
+                    borderColor: '#A7F3D0',
+                    elevation: 8,
+                    shadowColor: '#059669',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 10,
+                  }}
+                >
+                  {isOcrProcessing ? (
+                    <>
+                      <ActivityIndicator size="small" color="white" style={{ marginRight: 10 }} />
+                      <Text style={{ color: 'white', fontWeight: '800', fontSize: 15 }}>AI đang đọc tem Kệ...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={{ color: 'white', fontWeight: '800', fontSize: 15 }}>Chụp Ảnh Tem Kệ</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick Shelf Selection Bar */}
+              <View style={{
+                position: 'absolute', bottom: 90, left: 16, right: 16,
+                backgroundColor: 'rgba(15, 23, 42, 0.85)', padding: 12, borderRadius: 20, alignItems: 'center'
+              }}>
+                <Text style={{ color: '#E2E8F0', fontSize: 11, fontWeight: '700', marginBottom: 8 }}>
+                  Hoặc chọn nhanh vị trí Kệ bạn đang đứng:
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 4 }}>
+                  {[
+                    { id: 1, label: 'Kệ 1 (Ăn vặt)' },
+                    { id: 2, label: 'Kệ 2 (Giải khát)' },
+                    { id: 3, label: 'Kệ 3 (Tươi sống)' },
+                    { id: 4, label: 'Kệ 4 (Mỳ gói)' },
+                    { id: 5, label: 'Kệ 5 (Gia dụng)' },
+                    { id: 6, label: 'Kệ 6 (Gia vị)' },
+                    { id: 7, label: 'Kệ 7 (Thu ngân)' },
+                  ].map((shelf) => (
+                    <TouchableOpacity
+                      key={shelf.id}
+                      style={{
+                        backgroundColor: '#334155',
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#64748B',
+                      }}
+                      onPress={() => {
+                        setIsScanningLocation(false);
+                        console.log(`📍 Chọn thủ công vị trí Kệ #${shelf.id} (${shelf.label})`);
+                        performCheckout(shelf.id);
+                      }}
+                    >
+                      <Text style={{ color: 'white', fontWeight: '800', fontSize: 12 }}>{shelf.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Cancel Button */}
+              <TouchableOpacity
+                style={{
+                  position: 'absolute', bottom: 30, alignSelf: 'center',
+                  backgroundColor: '#EF4444', paddingVertical: 10, paddingHorizontal: 28, borderRadius: 24
+                }}
+                onPress={() => setIsScanningLocation(false)}
+              >
+                <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>Đóng Camera</Text>
+              </TouchableOpacity>
+            </SafeAreaView>
+          </View>
+        </Modal>
+
       </LinearGradient>
     </GestureHandlerRootView>
   );
@@ -762,7 +1081,7 @@ const styles = StyleSheet.create({
   navTabBoxActive: {
     backgroundColor: '#059669',
   },
-  
+
   // Custom Styles for Alerts & Health
   alertBadge: {
     flexDirection: 'row',
@@ -779,6 +1098,9 @@ const styles = StyleSheet.create({
   },
   alertAvoid: {
     backgroundColor: '#F59E0B', // Amber for Avoid
+  },
+  alertBudget: {
+    backgroundColor: '#3B82F6', // Blue for Budget
   },
   alertBadgeText: {
     color: 'white',

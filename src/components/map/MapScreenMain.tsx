@@ -1104,10 +1104,23 @@ export default function MapScreenMain() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.successTitle}>Đã thiết lập lộ trình!</Text>
                 <Text style={styles.successDesc}>
-                  Robot đang di chuyển đến vị trí của bạn để dẫn đường tới kệ hàng.
+                  Lộ trình được hiển thị trên bản đồ. Đi theo đường nét đứt màu xanh.
                 </Text>
               </View>
             </LinearGradient>
+
+            {/* Product List */}
+            {routePoints.filter(p => p.productId != null).length > 0 && (
+              <View style={styles.productListContainer}>
+                <Text style={styles.productListTitle}>Danh sách cần mua:</Text>
+                {routePoints.filter(p => p.productId != null).map((p, index) => (
+                  <View key={`prod-${p.productId}-${index}`} style={styles.productListItem}>
+                    <View style={styles.productListItemDot} />
+                    <Text style={styles.productListText}>{p.productName || p.description}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {invoiceData?.totalPrice && (
               <View style={styles.invoiceSummary}>
@@ -1356,11 +1369,44 @@ const styles = StyleSheet.create({
   successTitle: { fontSize: 15, fontWeight: '800', color: '#065F46' },
   successDesc: { fontSize: 12, color: '#047857', marginTop: 4, lineHeight: 18, fontWeight: '500' },
   
-  invoiceSummary: { backgroundColor: '#F8FAFC', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F1F5F9' },
+  invoiceSummary: { backgroundColor: '#F8FAFC', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F1F5F9', marginTop: 12 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   summaryLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
   summaryValueText: { fontSize: 12, color: '#334155', fontWeight: '800' },
   summaryPriceText: { fontSize: 16, color: '#059669', fontWeight: '900' },
+
+  productListContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 4,
+  },
+  productListTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 10,
+  },
+  productListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  productListItemDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#3B82F6',
+    marginRight: 10,
+  },
+  productListText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '600',
+    flex: 1,
+  },
   
   btnHome: {
     backgroundColor: '#059669', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

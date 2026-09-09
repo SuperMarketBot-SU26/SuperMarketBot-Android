@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AlertTriangle, ArrowLeft, ArrowRight, Plus, ShoppingBag, Star, Zap } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { PersonalizationService } from '../../services/PersonalizationService';
 import { ProductDto, ProductService } from '../../services/ProductService';
 import { SearchResultItemDto, SearchService } from '../../services/SearchService';
 import { fixMojibake } from '../../utils/textUtils';
+import SearchResultItem from './SearchResultItem';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +33,36 @@ export default function SearchScreenMain() {
   const [restrictedInfo, setRestrictedInfo] = useState<{ isRestricted: boolean; productName: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAddingAll, setIsAddingAll] = useState(false);
+
+  const totalSearchPrice = useMemo(() => {
+    return results.reduce((sum, item) => sum + (item.promotionPrice ?? item.unitPrice ?? 0), 0);
+  }, [results]);
+
+  const budgetLimit = auth?.profile?.spendingLimit || 0;
+  const isSearchOverBudget = budgetLimit > 0 && totalSearchPrice > budgetLimit;
+  const overBudgetAmount = isSearchOverBudget ? totalSearchPrice - budgetLimit : 0;
+
+  const handleAddAllToCart = async () => {
+    if (results.length === 0) return;
+    setIsAddingAll(true);
+    let successCount = 0;
+    try {
+      for (const item of results) {
+        await CartService.addItem(item.productId, 1);
+        successCount++;
+      }
+      ToastAndroid.show(`Đã thêm ${successCount} sản phẩm vào giỏ hàng`, ToastAndroid.SHORT);
+      if (auth?.profile?.memberId) {
+        const cartData = await CartService.getCart();
+        setCartCount(cartData.items.reduce((sum: number, item: any) => sum + item.quantity, 0));
+      }
+    } catch (e: any) {
+      ToastAndroid.show(`Lỗi khi thêm: ${e.message}`, ToastAndroid.LONG);
+    } finally {
+      setIsAddingAll(false);
+    }
+  };
 
   useEffect(() => {
     const performSearch = async () => {
@@ -50,16 +81,33 @@ export default function SearchScreenMain() {
           aiExplanation: null,
         };
 
+        let userAllergies: string[] = [];
+        let userAvoids: string[] = [];
+        let userSpendingLimit: number = auth?.profile?.spendingLimit || 0;
+
+        if (isPersonal) {
+          try {
+            const prefs = await PersonalizationService.getHealthPreferences();
+            if (Array.isArray(prefs?.allergies)) {
+              userAllergies = prefs.allergies.map((p: any) => (p.tagName || '').toLowerCase());
+            }
+            if (Array.isArray(prefs?.avoids)) {
+              userAvoids = prefs.avoids.map((p: any) => (p.tagName || '').toLowerCase());
+            }
+          } catch (e) {
+            console.warn('[SearchScreenMain] Lỗi lấy health preferences:', e);
+          }
+        }
+
         if (intent === 'recipe') {
-          console.log(`[SearchScreenMain] Phát hiện ý định tìm công thức nấu ăn. Đang gọi recommendIngredients...`);
+          console.log(`[SearchScreenMain] Phát hiện ý định tìm công thức nấu ăn (Recipe AI)...`);
           let finalQuery = searchQuery as string;
           if (auth?.profile) {
             try {
               let notes: string[] = [];
               if (auth.profile.spendingLimit) {
-                notes.push(`Ngân sách tối đa: ${auth.profile.spendingLimit.toLocaleString('vi-VN')}đ (Nếu vượt quá, đề xuất món rẻ hơn)`);
+                notes.push(`Ngân sách tối đa: ${auth.profile.spendingLimit.toLocaleString('vi-VN')}đ.`);
               }
-
               try {
                 const prefs = await PersonalizationService.getHealthPreferences();
                 const diets = Array.isArray(prefs?.preferreds) ? prefs.preferreds.map((p: any) => p.tagName) : [];
@@ -77,15 +125,14 @@ export default function SearchScreenMain() {
               } catch (e) {
                 console.warn('[SearchScreenMain] Lỗi lấy health preferences:', e);
               }
-
               if (notes.length > 0) {
                 finalQuery = `${finalQuery} (Lưu ý: ${notes.join(' | ')})`;
               }
             } catch (e) {
-              console.warn('[SearchScreenMain] Không thể lấy profile:', e);
+              console.warn('[SearchScreenMain] Lỗi profile:', e);
             }
           }
-          console.log(`[SearchScreenMain] Query cuối cùng gửi cho AI: "${finalQuery}"`);
+
           const recipeData = await SearchService.recommendIngredients(finalQuery);
           if (recipeData && recipeData.ingredients) {
             searchResults.results = recipeData.ingredients.map((ing: any) => {
@@ -109,8 +156,9 @@ export default function SearchScreenMain() {
                 subcategoryName: null,
                 productTypeName: null,
                 healthTags: [],
-                isRestricted,
-                altName,
+                isRestricted: isPersonal ? isRestricted : false,
+                isOverBudget: isPersonal ? (ing.isOverBudget || false) : false,
+                altName: isPersonal ? altName : null,
               };
             });
             searchResults.totalMatches = recipeData.ingredients.length;
@@ -118,48 +166,66 @@ export default function SearchScreenMain() {
             searchResults.aiExplanation = 'Đây là các nguyên liệu AI đề xuất cho món ăn của bạn.';
           }
         } else if (isPersonal) {
+          // Tìm kiếm từ khóa sản phẩm cá nhân hóa
           searchResults = await SearchService.searchPersonalized({
             q: searchQuery as string,
-            useAi: true,
+            useAi: false,
           });
         } else {
+          // Tìm kiếm tất cả thông thường (KHÔNG dùng AI, KHÔNG gắn tag cá nhân)
           searchResults = await SearchService.searchAll({
             q: searchQuery as string,
             useAi: false,
           });
         }
 
-        console.log('[SearchScreenMain] Dữ liệu trả về từ API:', JSON.stringify(searchResults, null, 2));
+        const rawList = searchResults.results || [];
+        const inStockResults = rawList.filter(
+          (r: any) =>
+            !r.status ||
+            r.status.toLowerCase() === 'instock' ||
+            r.status.toLowerCase() === 'available' ||
+            r.status.toLowerCase() === 'active'
+        );
 
-        setResults(searchResults.results || []);
+        // Xử lý gắn Tag Vi phạm / Ngân sách theo chế độ Tìm kiếm
+        const processedResults = inStockResults.map((r: any) => {
+          if (!isPersonal) {
+            // Tìm tất cả: Bỏ hết các tag cảnh báo cá nhân
+            return {
+              ...r,
+              isRestricted: false,
+              isOverBudget: false,
+              altName: null,
+            };
+          }
+
+          // Tìm cá nhân hóa: Kiểm tra xem sản phẩm có vi phạm dị ứng hoặc ngân sách không
+          const productHealthTags = Array.isArray(r.healthTags)
+            ? r.healthTags.map((t: any) => (typeof t === 'string' ? t : t.tagName || '').toLowerCase())
+            : [];
+          const hasConflict = productHealthTags.some((tag: string) => userAllergies.includes(tag) || userAvoids.includes(tag));
+          const isOverBudget = userSpendingLimit > 0 && (r.promotionPrice ?? r.unitPrice ?? 0) > userSpendingLimit;
+
+          return {
+            ...r,
+            isRestricted: r.isRestricted || hasConflict,
+            isOverBudget: r.isOverBudget || isOverBudget,
+          };
+        });
+
+        setResults(processedResults);
         setAiRanked(searchResults.aiRanked || false);
         setAiExplanation(searchResults.aiExplanation || null);
 
         let products: ProductDto[] = [];
         try {
           if (isPersonal) {
-            if (searchQuery) {
-              const rawAll = await SearchService.searchAll({ q: searchQuery as string });
-              if ((!searchResults.results || searchResults.results.length === 0)) {
-                if (rawAll.results && rawAll.results.length > 0) {
-                  const targetProduct = rawAll.results[0];
-                  setRestrictedInfo({ isRestricted: true, productName: targetProduct.productName });
-                  console.log(`[SearchScreenMain] Sản phẩm gốc #${targetProduct.productId} (${targetProduct.productName}) bị dị ứng. Đang lấy sản phẩm thay thế...`);
-                  products = await ProductService.getAlternatives(targetProduct.productId, auth?.profile?.memberId);
-                }
-              } else if (rawAll.results && rawAll.results.length > searchResults.results.length) {
-                setRestrictedInfo({ isRestricted: true, productName: 'Một số sản phẩm' });
-              }
-            }
-
-            if (!products || products.length === 0) {
-              products = (await PersonalizationService.getPersonalizedProducts()) as any;
-            }
+            products = (await PersonalizationService.getPersonalizedProducts()) as any;
           } else {
             products = await ProductService.getProducts();
           }
         } catch (e) {
-          console.warn('[SearchScreenMain] Lỗi khi lấy products gợi ý:', e);
           products = await ProductService.getProducts();
         }
 
@@ -200,6 +266,7 @@ export default function SearchScreenMain() {
 
     const currentPrice = item.promotionPrice ?? item.unitPrice ?? 0;
     const price = `${currentPrice.toLocaleString('vi-VN')}đ`;
+    const isOverBudget = item.isOverBudget || (auth?.profile?.spendingLimit ? auth.profile.spendingLimit > 0 && currentPrice > auth.profile.spendingLimit : false);
 
     const fallbackImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop';
 
@@ -211,9 +278,11 @@ export default function SearchScreenMain() {
       rating: 4.8,
       reviews: Math.floor(Math.random() * 80) + 20,
       price,
-      relevanceScore: item.relevanceScore || 0,
       isRestricted: item.isRestricted,
+      isOverBudget,
       altName: item.altName,
+      categoryName: item.categoryName,
+      subcategoryName: item.subcategoryName,
     };
   });
 
@@ -276,44 +345,13 @@ export default function SearchScreenMain() {
           </View>
         ) : (
           <>
-            {/* AI Explanation Card */}
-            {aiExplanation && (
-              <Animated.View entering={FadeInDown.delay(150)} style={styles.aiExplanationCard}>
-                <View style={styles.aiExplanationHeader}>
-                  <Zap color="#059669" size={20} fill="#059669" style={{ marginRight: 8 }} />
-                  <Text style={styles.aiExplanationTitle}>Trợ lý AI phân tích dinh dưỡng</Text>
-                </View>
-                <Text style={styles.aiExplanationText}>{aiExplanation}</Text>
-              </Animated.View>
-            )}
+            {/* Results Info */}
+            <Animated.View entering={FadeInDown.delay(150)} style={styles.resultsInfo}>
+              <Text style={styles.resultsTitle}>Kết quả phù hợp</Text>
+              <Text style={styles.resultsCount}>{mappedResults.length} sản phẩm</Text>
+            </Animated.View>
 
-            {/* Results Info or Allergy Warning */}
-            {restrictedInfo?.isRestricted ? (
-              <Animated.View entering={FadeInDown.delay(150)} style={styles.allergyCard}>
-                <View style={styles.allergyHeader}>
-                  <AlertTriangle color="#DC2626" size={20} style={{ marginRight: 8 }} />
-                  <Text style={styles.allergyTitle}>Cảnh báo dị ứng & Chế độ ăn</Text>
-                </View>
-                <Text style={styles.allergyText}>
-                  {restrictedInfo.productName === 'Một số sản phẩm' ? (
-                    <>
-                      <Text style={styles.allergyBold}>Một số sản phẩm</Text> đã bị ẩn vì chứa thành phần dị ứng hoặc không phù hợp với chế độ ăn của bạn. Bạn có thể chuyển sang "Tìm tất cả" để xem toàn bộ.
-                    </>
-                  ) : (
-                    <>
-                      Sản phẩm <Text style={styles.allergyBold}>"{restrictedInfo.productName}"</Text> chứa thành phần dị ứng hoặc không phù hợp với chế độ ăn của bạn. Hệ thống đã tự động lọc ẩn sản phẩm này để bảo vệ sức khỏe cho bạn.
-                    </>
-                  )}
-                </Text>
-              </Animated.View>
-            ) : (
-              <Animated.View entering={FadeInDown.delay(150)} style={styles.resultsInfo}>
-                <Text style={styles.resultsTitle}>Kết quả phù hợp</Text>
-                <Text style={styles.resultsCount}>{mappedResults.length} sản phẩm</Text>
-              </Animated.View>
-            )}
-
-            {mappedResults.length === 0 && !restrictedInfo?.isRestricted ? (
+            {mappedResults.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>Không tìm thấy sản phẩm nào phù hợp.</Text>
               </View>
@@ -321,58 +359,13 @@ export default function SearchScreenMain() {
               /* Product List */
               <View style={styles.productList}>
                 {mappedResults.map((product, index) => (
-                  <View key={product.id}>
-                    <TouchableOpacity style={styles.productCard} onPress={() => router.push({ pathname: '/product', params: { id: product.id } })}>
-                      <Image
-                        source={{ uri: product.image }}
-                        style={styles.productImageContainer}
-                        contentFit="cover"
-                      />
-                      <Animated.View entering={FadeInRight.delay(200 + index * 100)} style={styles.productContent}>
-                        <View style={styles.tagRow}>
-                          {product.tags.map((tag, idx) => {
-                            const style = getTagStyle(tag.type);
-                            return (
-                              <View key={idx} style={[styles.tag, { backgroundColor: style.bg }]}>
-                                <Text style={[styles.tagText, { color: style.text }]}>{tag.text}</Text>
-                              </View>
-                            );
-                          })}
-                        </View>
-                        {/* Removed relevance score rendering */}
-                        {product.isRestricted && (
-                          <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#FEF2F2', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6, flexWrap: 'wrap' }}
-                            onPress={() => {
-                              if (product.altName) {
-                                router.setParams({ query: product.altName });
-                              }
-                            }}
-                          >
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#DC2626', marginLeft: 4 }}>
-                              ⚠️ VI PHẠM CHẾ ĐỘ ĂN
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                        <Text style={styles.productTitle} numberOfLines={2}>{product.title}</Text>
-                        <View style={styles.priceRow}>
-                          <Text style={styles.priceText}>{product.price}</Text>
-                          <TouchableOpacity style={styles.addButton} onPress={async () => {
-                            try {
-                              await CartService.addItem(Number(product.id), 1);
-                              setCartCount(c => c + 1);
-                              ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
-                            } catch (e: any) {
-                              ToastAndroid.show(e.message, ToastAndroid.LONG);
-                            }
-                          }}>
-                            <Plus color="white" size={16} />
-                            <Text style={styles.addButtonText}>Thêm</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </Animated.View>
-                    </TouchableOpacity>
-                  </View>
+                  <SearchResultItem 
+                    key={product.id}
+                    product={product}
+                    index={index}
+                    getTagStyle={getTagStyle}
+                    setCartCount={setCartCount}
+                  />
                 ))}
               </View>
             ) : null}
@@ -382,15 +375,15 @@ export default function SearchScreenMain() {
         {/* AI Suggestions */}
         <Animated.View entering={FadeInDown.delay(300)} style={styles.aiSection}>
           <View style={styles.aiHeader}>
-            <View style={[styles.aiIconBox, restrictedInfo?.isRestricted && { backgroundColor: '#059669' }]}>
+            <View style={styles.aiIconBox}>
               <Zap color="white" size={16} fill="white" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.aiTitle}>
-                {restrictedInfo?.isRestricted ? 'Sản phẩm thay thế an toàn dành cho bạn' : 'Gợi ý dành cho bạn'}
+                Gợi ý dành cho bạn
               </Text>
               <Text style={styles.aiSubtitle}>
-                {restrictedInfo?.isRestricted ? 'An toàn tuyệt đối khỏi chất dị ứng & phù hợp chế độ ăn' : 'Lựa chọn thay thế tốt cho sức khỏe'}
+                Lựa chọn thay thế tốt cho sức khỏe
               </Text>
             </View>
           </View>
@@ -434,11 +427,33 @@ export default function SearchScreenMain() {
         </Animated.View>
       </ScrollView>
 
-      {/* Floating AI Button */}
-      <TouchableOpacity style={styles.floatingButton}>
-        <Zap color="white" size={24} fill="white" />
-      </TouchableOpacity>
-
+      {/* Sticky Bottom Bar */}
+      {results.length > 0 && !loading && !error && (
+        <Animated.View entering={FadeInDown.delay(200)} style={[styles.stickyBottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={styles.stickyContent}>
+            <View style={styles.stickyTextContainer}>
+              <Text style={styles.stickyTotalLabel}>TỔNG ĐƠN HÀNG</Text>
+              <Text style={styles.stickyTotalPrice}>{totalSearchPrice.toLocaleString('vi-VN')}đ</Text>
+              {isSearchOverBudget && (
+                <Text style={styles.stickyBudgetWarning}>
+                  ⚠️ Vượt ngân sách: {overBudgetAmount.toLocaleString('vi-VN')}đ
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity 
+              style={[styles.stickyAddAllButton, isAddingAll && { opacity: 0.7 }]} 
+              onPress={handleAddAllToCart}
+              disabled={isAddingAll}
+            >
+              {isAddingAll ? (
+                <ActivityIndicator color="white" size="small" />
+              ) : (
+                <Text style={styles.stickyAddAllText}>Thêm tất cả</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
 
     </SafeAreaView>
   );
@@ -937,5 +952,61 @@ const styles = StyleSheet.create({
   allergyBold: {
     fontWeight: '800',
     color: '#DC2626',
+  },
+  stickyBottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  stickyContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stickyTextContainer: {
+    flex: 1,
+    marginRight: 16,
+  },
+  stickyTotalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  stickyTotalPrice: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  stickyBudgetWarning: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginTop: 2,
+  },
+  stickyAddAllButton: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 140,
+  },
+  stickyAddAllText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

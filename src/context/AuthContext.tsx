@@ -23,7 +23,8 @@ type AuthContextType = {
   isLoading: boolean;
   login: (token: string, user: User) => Promise<void>;
   logout: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: (forceCacheBust?: boolean) => Promise<void>;
+  updateGlobalAvatarVersion: () => void;
   needsOnboarding: boolean;
   completeOnboarding: () => void;
 };
@@ -42,12 +43,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await SecureStore.setItemAsync('onboardingCompleted', 'true');
   };
 
-  const refreshProfile = async () => {
+  const refreshProfile = async (forceCacheBust = false) => {
     try {
       const p = await ProfileService.getProfile();
+      let newVersion = globalAvatarVersion;
+      if (forceCacheBust) {
+        newVersion = Date.now();
+        globalAvatarVersion = newVersion;
+      }
+      
       if (p.facePath) {
         // Bypass image cache without flickering on every focus
-        p.facePath = `${p.facePath}?v=${globalAvatarVersion}`;
+        p.facePath = `${p.facePath}?v=${newVersion}`;
+      }
+      if (p.avatarUrl) {
+        p.avatarUrl = `${p.avatarUrl}?v=${newVersion}`;
       }
       setProfile(p);
 
@@ -131,7 +141,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, token, isLoading, login, logout, refreshProfile, needsOnboarding, completeOnboarding }}>
+    <AuthContext.Provider value={{ user, profile, token, isLoading, login, logout, refreshProfile, updateGlobalAvatarVersion, needsOnboarding, completeOnboarding }}>
       {children}
     </AuthContext.Provider>
   );

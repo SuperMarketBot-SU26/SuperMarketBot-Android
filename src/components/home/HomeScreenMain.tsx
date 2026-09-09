@@ -5,12 +5,12 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { AlertTriangle, Bell, Bot, CheckCircle2, Home, Lock, Map, Mic, Plus, Search, ShoppingBag, ShoppingCart, Sparkles, User, X, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, FlatList, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import ProductCard from './ProductCard';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
-import { useNotification } from '../../context/NotificationContext';
 import { CartService } from '../../services/CartService';
 import { MealSuggestionService, MenuAssistantResponseDto } from '../../services/MealSuggestionService';
 import { MemberAdService, SponsoredRecommendationDto } from '../../services/MemberAdService';
@@ -107,7 +107,6 @@ export default function HomeScreenMain() {
   const [loadingMeals, setLoadingMeals] = useState(true);
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
-  const { unreadCount } = useNotification();
   const userTier = (profile?.membershipTier || 'MEDIUM').toUpperCase();
   const tierTheme = getTierTheme(userTier);
   const insets = useSafeAreaInsets();
@@ -460,6 +459,12 @@ export default function HomeScreenMain() {
   };
 
   const fetchSponsoredAds = async () => {
+    if (userTier !== 'PREMIUM') {
+      setSponsoredAds([]);
+      setSystemDeals([]);
+      setLoadingAds(false);
+      return;
+    }
     try {
       setLoadingAds(true);
       if (profile?.memberId) {
@@ -608,7 +613,31 @@ export default function HomeScreenMain() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <FlatList
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        data={products}
+        keyExtractor={(item) => item.productId.toString()}
+        numColumns={2}
+        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 20 }}
+        ListEmptyComponent={
+          loadingProducts ? (
+            <ActivityIndicator size="large" color="#059669" style={{ marginVertical: 20 }} />
+          ) : (
+            <Text style={{ textAlign: 'center', marginVertical: 20, color: '#6B7280' }}>Không có sản phẩm nào</Text>
+          )
+        }
+        renderItem={({ item: product }) => <ProductCard product={product} userTier={userTier} spendingLimit={spendingLimit} hideBudgetWarning={true} />}
+        ListFooterComponent={
+          <TouchableOpacity style={[styles.viewMoreCard, { marginHorizontal: 20 }]} activeOpacity={0.8} onPress={() => router.push({ pathname: '/search', params: { mode: 'personal' } })}>
+            <View style={styles.viewMoreIconBox}>
+              <Plus color="#059669" size={24} />
+            </View>
+            <Text style={styles.viewMoreTitle}>Xem thêm sản phẩm</Text>
+            <Text style={styles.viewMoreSubtitle}>Dựa trên thói quen mua sắm</Text>
+          </TouchableOpacity>
+        }
+        ListHeaderComponent={<>
 
         {/* Header */}
         <View style={styles.header}>
@@ -625,18 +654,6 @@ export default function HomeScreenMain() {
             </View>
           </TouchableOpacity>
           <View style={styles.headerActions}>
-            <Animated.View style={styles.iconButton} sharedTransitionTag="shared-bell-icon">
-              <TouchableOpacity style={{ flex: 1, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }} onPress={() => router.push('/notifications')}>
-                <Bell color="#4B5563" size={22} />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationDot}>
-                    <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </Animated.View>
             <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/profile')}>
               <User color="#4B5563" size={22} />
             </TouchableOpacity>
@@ -974,71 +991,9 @@ export default function HomeScreenMain() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.productGrid}>
-            {loadingProducts ? (
-              <ActivityIndicator size="large" color="#059669" style={{ marginVertical: 20 }} />
-            ) : products.length === 0 ? (
-              <Text style={{ textAlign: 'center', marginVertical: 20, color: '#6B7280' }}>Không có sản phẩm nào</Text>
-            ) : (
-              products.map(product => (
-                <TouchableOpacity
-                  key={product.productId}
-                  style={styles.productCard}
-                  activeOpacity={0.8}
-                  onPress={() => router.push({ pathname: '/product', params: { id: product.productId } })}
-                >
-                  <View style={styles.productImageContainer}>
-                    <Image
-                      source={product.imageUrl ? { uri: product.imageUrl } : { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop' }}
-                      style={styles.productImage}
-                    />
-                    <View style={styles.aiRecommendBadge}>
-                      <Zap color="white" size={10} fill="white" style={{ marginRight: 4 }} />
-                      <Text style={styles.aiRecommendText}>AI Đề xuất</Text>
-                    </View>
-                    {(product as any).hasAllergenConflict && (
-                      <View style={styles.restrictedBadge}>
-                        <AlertTriangle color="white" size={12} />
-                        <Text style={styles.restrictedText}>VI PHẠM</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.productInfo}>
-                    <Text style={styles.productTitle} numberOfLines={1}>{product.productName}</Text>
-                    <Text style={styles.productSubtitle}>Trạng thái: {product.status}</Text>
-                    <View style={styles.productPriceRow}>
-                      <Text style={styles.productPrice}>{product.unitPrice.toLocaleString('vi-VN')} đ</Text>
-                      <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={async () => {
-                          try {
-                            await CartService.addItem(product.productId, 1);
-                            ToastAndroid.show("Đã thêm sản phẩm vào giỏ hàng", ToastAndroid.SHORT);
-                          } catch (e: any) {
-                            ToastAndroid.show(e.message, ToastAndroid.LONG);
-                          }
-                        }}
-                      >
-                        <Plus color="white" size={16} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-
-            {/* View More Card */}
-            <TouchableOpacity style={styles.viewMoreCard} activeOpacity={0.8} onPress={() => router.push({ pathname: '/search', params: { mode: 'personal' } })}>
-              <View style={styles.viewMoreIconBox}>
-                <Plus color="#059669" size={24} />
-              </View>
-              <Text style={styles.viewMoreTitle}>Xem thêm sản phẩm</Text>
-              <Text style={styles.viewMoreSubtitle}>Dựa trên thói quen mua sắm</Text>
-            </TouchableOpacity>
-          </View>
         </Animated.View>
-
-      </ScrollView>
+        </>}
+      />
 
       {/* Bottom Navigation */}
       <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>

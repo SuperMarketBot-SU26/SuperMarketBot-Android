@@ -11,24 +11,7 @@ import { ProfileService } from '../../services/ProfileService';
 import { useAuth } from '../../context/AuthContext';
 import { ToastAndroid, ActivityIndicator } from 'react-native';
 
-const DIET_UI_MAP: Record<number, any> = {
-  8: { icon: Leaf },
-  6: { icon: RefreshCw },
-  10: { icon: Zap },
-  7: { icon: Dumbbell },
-};
-
-const DEFAULT_DIET_UI = { icon: UtensilsCrossed };
-
-const ALLERGY_UI_MAP: Record<number, any> = {
-  1: { icon: Leaf },
-  2: { icon: Flame },
-  3: { icon: FlaskConical },
-  4: { icon: Clock },
-  5: { icon: Fish },
-};
-
-const DEFAULT_ALLERGY_UI = { icon: AlertTriangle };
+import * as Icons from 'lucide-react-native';
 
 interface HealthItem {
   id: string;
@@ -56,17 +39,21 @@ export default function ShoppingPreferencesScreenMain() {
         setIsLoading(true);
         const tags = await PersonalizationService.getHealthTags();
         
-        const dietTags = tags.filter(t => t.tagType === 'diet').map(t => ({
-          id: t.healthTagId.toString(),
-          name: t.tagName,
-          icon: DIET_UI_MAP[t.healthTagId]?.icon || DEFAULT_DIET_UI.icon
-        }));
+        const dietTags = tags
+          .filter(t => t.tagType && t.tagType.toLowerCase() === 'diet')
+          .map(t => ({
+            id: t.healthTagId.toString(),
+            name: t.tagName,
+            icon: (Icons as any)[t.iconName || ''] || Icons.UtensilsCrossed
+          }));
         
-        const allergyTags = tags.filter(t => t.tagType === 'allergy').map(t => ({
-          id: t.healthTagId.toString(),
-          name: t.tagName,
-          icon: ALLERGY_UI_MAP[t.healthTagId]?.icon || DEFAULT_ALLERGY_UI.icon
-        }));
+        const allergyTags = tags
+          .filter(t => t.tagType && (t.tagType.toLowerCase() === 'allergen' || t.tagType.toLowerCase() === 'allergy' || t.tagType.toLowerCase() === 'ingredient'))
+          .map(t => ({
+            id: t.healthTagId.toString(),
+            name: t.tagName,
+            icon: (Icons as any)[t.iconName || ''] || Icons.AlertTriangle
+          }));
 
         setAvailableDiets(dietTags);
         setAvailableAllergies(allergyTags);

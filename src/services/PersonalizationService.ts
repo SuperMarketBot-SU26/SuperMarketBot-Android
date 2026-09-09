@@ -1,10 +1,11 @@
-import { BASE_URL } from './AuthService';
 import * as SecureStore from 'expo-secure-store';
+import { BASE_URL } from './AuthService';
 
 export interface HealthTagDto {
   healthTagId: number;
   tagName: string;
   tagType: string;
+  iconName?: string;
 }
 
 export interface HealthPreferenceItemDto {
@@ -73,7 +74,7 @@ export class PersonalizationService {
    */
   static async getHealthPreferences(): Promise<any> {
     const headers = await getAuthHeaders();
-    const response = await fetch(`${BASE_URL}/api/members/me/health-preferences?t=${Date.now()}`, { 
+    const response = await fetch(`${BASE_URL}/api/members/me/health-preferences?t=${Date.now()}`, {
       headers: {
         ...headers,
         'Cache-Control': 'no-cache',
@@ -100,11 +101,13 @@ export class PersonalizationService {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[PersonalizationService.updateHealthPreferences] Error:', errorText);
-      
+
       let errorMessage = `Cập nhật sở thích sức khoẻ thất bại (${response.status})`;
       try {
         const errorJson = JSON.parse(errorText);
-        if (errorJson.message) {
+        if (errorJson.error) {
+          errorMessage = errorJson.error;
+        } else if (errorJson.message) {
           errorMessage = errorJson.message;
         } else if (errorJson.detail) {
           errorMessage = errorJson.detail;
@@ -118,7 +121,7 @@ export class PersonalizationService {
           errorMessage = errorText;
         }
       }
-      
+
       throw new Error(errorMessage);
     }
     return true;
@@ -149,9 +152,11 @@ export class PersonalizationService {
   static async getPersonalizedMeals(): Promise<RecipeDto[]> {
     const headers = await getAuthHeaders();
     const response = await fetch(`${BASE_URL}/api/members/me/personalized-meals?t=${Date.now()}`, { headers });
-    if (!response.ok) {
-      throw new Error(`Lỗi gợi ý món ăn (${response.status})`);
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Backend 500 error details: ${errorText}`);
+        throw new Error(`Loi goi y mon an (${response.status}) - ${errorText}`);
+      }
     return response.json();
   }
 
