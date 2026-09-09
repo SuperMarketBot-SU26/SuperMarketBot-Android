@@ -71,7 +71,7 @@ export default function SearchScreenMain() {
 
                 if (diets.length > 0 || allergies.length > 0) {
                   notes.push(
-                    `HƯỚNG DẪN 2 BƯỚC: Bước 1: Liệt kê ĐẦY ĐỦ nguyên liệu GỐC chuẩn truyền thống (không tự ý bỏ thịt/cá nếu món gốc có). Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU nguyên liệu gốc VI PHẠM, hãy set "isRestricted": true và điền tên sản phẩm chay/an toàn thay thế vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.`
+                    `HƯỚNG DẪN: Bước 1: Giữ thành phần thịt/cá nếu món gốc là món mặn (không tự đổi sang đồ chay trừ khi có yêu cầu ăn chay). Nếu có yêu cầu rẻ/tiết kiệm/dưới X tiền, ĐƯỢC PHÉP đổi sang loại thịt/cá rẻ hơn để đảm bảo ngân sách. Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU vi phạm, set "isRestricted": true và điền sản phẩm chay/an toàn vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.`
                   );
                 }
               } catch (e) {
