@@ -107,28 +107,28 @@ export class NavigationService {
    */
   static async optimizeShoppingRoute(
     productIds: number[],
-    startX: number = 7.25,
-    startY: number = 8.6,
-    robotId?: number,
-    startNodeId?: number
+    startNodeId: number = 7,
+    startX?: number,
+    startY?: number,
+    robotId?: number
   ): Promise<OptimizeShoppingRouteResponseDto> {
     const token = await this.getToken();
     const url = `${BASE_URL}/api/Navigation/optimize-shopping-route`;
     const payload: {
       robotId: number;
       productIds: number[];
+      startNodeId: number;
       startX?: number;
       startY?: number;
-      startNodeId?: number;
     } = {
       robotId: robotId ?? 1,
       productIds,
-      startX,
-      startY,
+      startNodeId: startNodeId > 0 ? startNodeId : 7,
     };
 
-    if (startNodeId !== undefined && startNodeId > 0) {
-      payload.startNodeId = startNodeId;
+    if (startX !== undefined && startY !== undefined) {
+      payload.startX = startX;
+      payload.startY = startY;
     }
 
     console.log('[NavigationService] optimizeShoppingRoute payload:', payload);

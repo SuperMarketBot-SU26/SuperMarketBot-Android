@@ -72,6 +72,7 @@ export default function SearchScreenMain() {
       setRestrictedInfo(null);
       try {
         const isPersonal = mode === 'personal';
+        const activeSortBy = (sortBy as string) || 'relevance';
         const intent = SearchService.classifyIntent(searchQuery as string);
         let searchResults: any = {
           query: searchQuery as string,
@@ -175,7 +176,6 @@ export default function SearchScreenMain() {
           }
         } else if (isPersonal) {
           // Tìm kiếm từ khóa sản phẩm cá nhân hóa
-          const activeSortBy = (sortBy as string) || 'relevance';
           searchResults = await SearchService.searchPersonalized({
             q: searchQuery as string,
             sortBy: activeSortBy,
@@ -183,7 +183,6 @@ export default function SearchScreenMain() {
           });
         } else {
           // Tìm kiếm tất cả thông thường (KHÔNG dùng AI, KHÔNG gắn tag cá nhân)
-          const activeSortBy = (sortBy as string) || 'relevance';
           searchResults = await SearchService.searchAll({
             q: searchQuery as string,
             sortBy: activeSortBy,
@@ -201,7 +200,7 @@ export default function SearchScreenMain() {
         );
 
         // Xử lý gắn Tag Vi phạm / Ngân sách theo chế độ Tìm kiếm
-        const processedResults = inStockResults.map((r: any) => {
+        let processedResults = inStockResults.map((r: any) => {
           if (!isPersonal) {
             // Tìm tất cả: Bỏ hết các tag cảnh báo cá nhân
             return {
@@ -298,7 +297,7 @@ export default function SearchScreenMain() {
         });
 
         if (activeSortBy === 'price_asc' && userSpendingLimit > 0) {
-          processedResults = processedResults.filter(r => !r.isOverBudget);
+          processedResults = processedResults.filter((r: any) => !r.isOverBudget);
         }
 
         setResults(processedResults);

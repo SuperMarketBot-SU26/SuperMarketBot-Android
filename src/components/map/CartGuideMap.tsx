@@ -47,14 +47,14 @@ function getShelfNumber(shelfId: string): string {
 
 function checkShelfHighlight(
   shelf: typeof SHELVES[0],
-  highlightedShelves: string[],
+  highlightedShelves: string[] | undefined,
   destinations: GuideDestination[]
 ): boolean {
   const num = getShelfNumber(shelf.id);
   const keyLabel = shelf.keyLabel.toUpperCase();
 
-  if (highlightedShelves && highlightedShelves.length > 0) {
-    const matched = highlightedShelves.some(item => {
+  if (highlightedShelves && Array.isArray(highlightedShelves)) {
+    return highlightedShelves.some(item => {
       if (!item) return false;
       const upper = item.toUpperCase();
       return (
@@ -67,7 +67,6 @@ function checkShelfHighlight(
         upper.includes(`K${num}_`)
       );
     });
-    if (matched) return true;
   }
 
   if (destinations && destinations.length > 0) {
@@ -267,18 +266,29 @@ const AISLE_WAYPOINTS: Record<string, Point> = {
 };
 
 function projectDestinationToAisle(item: GuideDestination): Point {
+  // 1. Ưu tiên kiểm tra NodeID (1..8) trước tiên để cố định waypoint theo mốc chuẩn
+  if (item.nodeId && Number(item.nodeId) >= 1 && Number(item.nodeId) <= 8) {
+    const nStr = String(item.nodeId);
+    if (AISLE_WAYPOINTS[nStr]) {
+      return AISLE_WAYPOINTS[nStr];
+    }
+  }
+
+  // 2. Tìm theo mã Slot hoặc Tên kệ / Quầy
   const slotCode = (item.slotCode || '').toUpperCase();
   const slotMatch = slotCode.match(/K(\d+)_/i);
   let shelfNum = slotMatch ? slotMatch[1] : '';
 
   if (!shelfNum) {
     const loc = (item.shelfLocation || item.nodeName || item.description || item.locationName || '').toUpperCase();
-    const match = loc.match(/KỆ\s*(\d+)/i) || loc.match(/KE\s*(\d+)/i) || loc.match(/KV\s*(\d+)/i) || loc.match(/SLOT\s*K(\d+)/i);
-    shelfNum = match ? match[1] : '';
-  }
-
-  if (!shelfNum && item.nodeId && Number(item.nodeId) >= 1 && Number(item.nodeId) <= 8) {
-    shelfNum = String(item.nodeId);
+    if (loc.includes('THU NGÂN') || loc.includes('CỬA') || loc.includes('CHECKOUT') || loc.includes('CỔNG VÀO')) {
+      shelfNum = '7';
+    } else if (loc.includes('TRẠM SẠC') || loc.includes('CHARG')) {
+      shelfNum = '8';
+    } else {
+      const match = loc.match(/KỆ\s*(\d+)/i) || loc.match(/KE\s*(\d+)/i) || loc.match(/KV\s*(\d+)/i) || loc.match(/SLOT\s*K(\d+)/i);
+      shelfNum = match ? match[1] : '';
+    }
   }
 
   if (shelfNum && AISLE_WAYPOINTS[shelfNum]) {

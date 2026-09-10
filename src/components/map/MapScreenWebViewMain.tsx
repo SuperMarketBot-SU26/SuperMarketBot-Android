@@ -111,6 +111,10 @@ export default function MapScreenWebViewMain() {
       return 'KV7';
     }
 
+    // Chỉ làm sáng các Kệ có sản phẩm cần mua trong giỏ hàng (bỏ qua các trạm đi ngang qua)
+    const hasProduct = d.productId || d.productName || (d.productNames && d.productNames.length > 0) || d.slotCode;
+    if (!hasProduct) return '';
+
     const slotMatch = (d.slotCode || '').match(/K(\d+)_/i);
     if (slotMatch) return `KV${slotMatch[1]}`;
 
@@ -149,11 +153,63 @@ export default function MapScreenWebViewMain() {
     return 'lối đi';
   };
 
-  const navSteps = routePlan.map((curr: any, i: number) => {
+  const AISLE_WAYPOINTS_MAP: Record<string, { x: number; y: number }> = {
+    '1': { x: 5.6, y: 3.0 },
+    '2': { x: 6.8, y: 3.0 },
+    '3': { x: 6.8, y: 6.4 },
+    '4': { x: 5.6, y: 6.8 },
+    '5': { x: 2.0, y: 6.8 },
+    '6': { x: 3.8, y: 4.7 },
+    '7': { x: 2.0, y: 3.0 },
+    '8': { x: 0.5, y: 3.0 },
+  };
+
+  const getAislePoint = (item: any): { x: number; y: number } => {
+    const rawNodeId = item?.nodeId ?? item?.NodeId;
+    const nodeId = typeof rawNodeId === 'number' ? rawNodeId : (rawNodeId ? parseInt(rawNodeId, 10) : undefined);
+    if (nodeId && AISLE_WAYPOINTS_MAP[String(nodeId)]) {
+      return AISLE_WAYPOINTS_MAP[String(nodeId)];
+    }
+    const slotCode = (item?.slotCode || item?.SlotCode || '').toUpperCase();
+    const slotMatch = slotCode.match(/K(\d+)_/i);
+    if (slotMatch && AISLE_WAYPOINTS_MAP[slotMatch[1]]) {
+      return AISLE_WAYPOINTS_MAP[slotMatch[1]];
+    }
+    const x = Number(item?.xCoord ?? item?.x ?? item?.X ?? 0);
+    const y = Number(item?.yCoord ?? item?.y ?? item?.Y ?? 0);
+    return { x: x > 4.0 ? 6.8 : 2.0, y: y > 1.5 ? 6.8 : 3.0 };
+  };
+
+  // Lọc chỉ lấy các điểm dừng quan trọng (Xuất phát, Kệ chứa sản phẩm, Quầy Thu Ngân kết thúc)
+  const keyStops: any[] = [];
+  routePlan.forEach((node: any, idx: number) => {
+    const rawNodeId = node.nodeId ?? node.NodeId;
+    const nodeId = typeof rawNodeId === 'number' ? rawNodeId : (rawNodeId ? parseInt(rawNodeId, 10) : undefined);
+
+    if (idx === 0) {
+      keyStops.push({ ...node, isStart: true });
+      return;
+    }
+
+    if (idx === routePlan.length - 1) {
+      keyStops.push({ ...node, isEnd: true });
+      return;
+    }
+
+    if (nodeId && nodeId >= 1 && nodeId <= 6) {
+      const prevStop = keyStops[keyStops.length - 1];
+      const prevNodeId = prevStop ? (prevStop.nodeId ?? prevStop.NodeId) : null;
+      if (prevNodeId !== nodeId) {
+        keyStops.push({ ...node, isShelfStop: true });
+      }
+    }
+  });
+
+  const activeStops = keyStops.length > 0 ? keyStops : routePlan;
+
+  const navSteps = activeStops.map((curr: any, i: number) => {
     const rawNodeId = curr.nodeId ?? curr.NodeId;
     const nodeId = typeof rawNodeId === 'number' ? rawNodeId : (rawNodeId ? parseInt(rawNodeId, 10) : undefined);
-    const x = Number(curr.xCoord ?? curr.x ?? curr.X ?? 0);
-    const y = Number(curr.yCoord ?? curr.y ?? curr.Y ?? 0);
     const rawName = curr.nodeName || curr.NodeName || curr.locationName || '';
     const pName = curr.productName || curr.ProductName || (curr.productNames && curr.productNames[0]);
 
@@ -164,10 +220,11 @@ export default function MapScreenWebViewMain() {
       locationLabel = rawName;
     }
 
+    // Bước 1: Điểm Bắt Đầu
     if (i === 0) {
-      const startName = locationLabel || (nodeId ? `Kệ ${nodeId}` : 'Vị trí hiện tại');
+      const startName = locationLabel || (nodeId === 7 || rawName.includes('Thu') ? 'Quầy Thu Ngân (Lối vào)' : (nodeId ? `Kệ ${nodeId}` : 'Vị trí hiện tại'));
       return {
-        id: `step-${i}`,
+        id: `step-${i + 1}`,
         stepNumber: 1,
         icon: '📍',
         badgeBg: '#10B981',
@@ -177,118 +234,33 @@ export default function MapScreenWebViewMain() {
       };
     }
 
-    if (i === routePlan.length - 1) {
-      const endName = locationLabel || (nodeId === 7 || rawName.includes('Thu') ? 'Quầy Thu Ngân' : `Trạm ${nodeId || i + 1}`);
+    // Bước Cuối: Điểm Kết Thúc
+    if (i === activeStops.length - 1) {
+      const endName = locationLabel || (nodeId === 7 || rawName.includes('Thu') ? 'Quầy Thu Ngân (Lối vào)' : `Trạm ${nodeId || i + 1}`);
       return {
-        id: `step-${i}`,
+        id: `step-${i + 1}`,
         stepNumber: i + 1,
         icon: '🏁',
         badgeBg: '#EF4444',
         title: `Đến ${endName}`,
-        instruction: `Đi thẳng đến ${endName} để thanh toán và hoàn tất đơn hàng.`,
+        instruction: `Di chuyển đến ${endName} để thanh toán và hoàn tất đơn hàng.`,
         locationLabel: endName,
       };
     }
 
-    // Intermediate step
-    const prev = routePlan[i - 1];
-    const prevX = Number(prev.xCoord ?? prev.x ?? prev.X ?? 0);
-    const prevY = Number(prev.yCoord ?? prev.y ?? prev.Y ?? 0);
-    const dx1 = x - prevX;
-    const dy1 = y - prevY;
-
-    if (nodeId && nodeId >= 1 && nodeId <= 6) {
-      const shelfTitle = locationLabel || `Kệ ${nodeId}`;
-      const isGenericProduct = !pName || pName.startsWith('Product #') || pName.startsWith('Trạm');
-      const itemDetail = isGenericProduct ? ' lấy sản phẩm cần mua' : ` lấy "${pName}"`;
-      return {
-        id: `step-${i}`,
-        stepNumber: i + 1,
-        icon: '🛒',
-        badgeBg: '#3B82F6',
-        title: `Ghé ${shelfTitle}`,
-        instruction: `Đến ${shelfTitle}${itemDetail}.`,
-        locationLabel: shelfTitle,
-      };
-    }
-
-    // Corner / turn waypoint (undefined nodeId)
-    const next = routePlan[i + 1] || curr;
-    const nextX = Number(next.xCoord ?? next.x ?? next.X ?? x);
-    const nextY = Number(next.yCoord ?? next.y ?? next.Y ?? y);
-    const dx2 = nextX - x;
-    const dy2 = nextY - y;
-
-    // Find next target shelf name
-    let nextTargetLabel = '';
-    for (let j = i + 1; j < routePlan.length; j++) {
-      const targetNode = routePlan[j];
-      const targetRawId = targetNode.nodeId ?? targetNode.NodeId;
-      const targetId = typeof targetRawId === 'number' ? targetRawId : (targetRawId ? parseInt(targetRawId, 10) : undefined);
-      if (targetId && SHELF_NAME_MAP[targetId]) {
-        nextTargetLabel = SHELF_NAME_MAP[targetId];
-        break;
-      }
-    }
-    if (!nextTargetLabel) nextTargetLabel = 'lối đi';
-
-    let turnDirection = 'Đi thẳng';
-    let turnIcon = '⬇️';
-
-    // Calculate 2D cross product for turn orientation relative to map layout
-    const cp = dx1 * dy2 - dy1 * dx2;
-
-    // Moving up main corridor (dy1 > 0) towards top aisle and turning right (dx2 > 0) is a LEFT turn on map layout
-    if (dy1 > 0.05 && dx2 > 0.05) {
-      turnDirection = 'Rẽ trái';
-      turnIcon = '⬅️';
-    } else if (dy1 < -0.05 && dx2 > 0.05) {
-      turnDirection = 'Rẽ phải';
-      turnIcon = '➡️';
-    } else if (cp > 0.05) {
-      turnDirection = 'Rẽ trái';
-      turnIcon = '⬅️';
-    } else if (cp < -0.05) {
-      turnDirection = 'Rẽ phải';
-      turnIcon = '➡️';
-    }
-
-    const isHeadingToCheckout = nextTargetLabel.includes('Thu Ngân') || (i === routePlan.length - 2);
-    if (isHeadingToCheckout) {
-      turnIcon = '↩️';
-      turnDirection = 'Quay lại';
-    }
-
-    // Find intermediate landmark shelf passed along the segment
-    let passedShelf = '';
-    const prevNodeId = routePlan[i - 1]?.nodeId ?? routePlan[i - 1]?.NodeId;
-    if (prevNodeId === 5) {
-      passedShelf = 'Kệ 4 (Mỳ ăn liền)';
-    } else if (isHeadingToCheckout || nextTargetLabel.includes('Thu Ngân')) {
-      passedShelf = 'Kệ 6 (Gia vị & Trà)';
-    }
-
-    let titleText = passedShelf
-      ? `Đi thẳng qua ${passedShelf.split(' ')[0]} ${passedShelf.split(' ')[1]} & ${turnDirection} sang ${nextTargetLabel}`
-      : `${turnDirection} & Đi thẳng sang ${nextTargetLabel}`;
-    let detailText = passedShelf
-      ? `Đi thẳng qua ${passedShelf} đến ngã rẽ, ${turnDirection.toLowerCase()} rồi đi thẳng tiếp đến ${nextTargetLabel}`
-      : `Tại ngã rẽ, ${turnDirection.toLowerCase()} rồi đi thẳng tiếp đến ${nextTargetLabel}`;
-
-    if (isHeadingToCheckout) {
-      const checkoutShelf = passedShelf || 'Kệ 6 (Gia vị & Trà)';
-      titleText = `Quay lại đi thẳng qua ${checkoutShelf.split(' ')[0]} ${checkoutShelf.split(' ')[1]} về ${nextTargetLabel}`;
-      detailText = `Quay lại và đi thẳng qua ${checkoutShelf} về ${nextTargetLabel}`;
-    }
+    // Các Bước Ghé Kệ lấy hàng
+    const shelfTitle = locationLabel || `Kệ ${nodeId}`;
+    const isGenericProduct = !pName || pName.startsWith('Product #') || pName.startsWith('Trạm');
+    const itemDetail = isGenericProduct ? 'lấy các sản phẩm cần mua' : `lấy "${pName}"`;
 
     return {
-      id: `step-${i}`,
+      id: `step-${i + 1}`,
       stepNumber: i + 1,
-      icon: turnIcon,
-      badgeBg: '#8B5CF6',
-      title: titleText,
-      instruction: `${detailText}.`,
-      locationLabel: `Ngã rẽ → ${nextTargetLabel}`,
+      icon: '🛒',
+      badgeBg: '#3B82F6',
+      title: `Ghé ${shelfTitle}`,
+      instruction: `Di chuyển đến ${shelfTitle} và ${itemDetail}.`,
+      locationLabel: shelfTitle,
     };
   });
 
