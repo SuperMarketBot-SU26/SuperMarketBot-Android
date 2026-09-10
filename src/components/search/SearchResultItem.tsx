@@ -32,6 +32,48 @@ const SearchResultItem = ({ product, index, getTagStyle, setCartCount }: SearchR
     }
   };
 
+  const getFallbackQuery = (p: any) => {
+    if (p.altName && p.altName !== 'null' && p.altName !== 'Không có sản phẩm thay thế') {
+      return p.altName;
+    }
+    const title = (p.title || '').trim();
+    const titleLower = title.toLowerCase();
+
+    // Nếu sản phẩm vi phạm Dị ứng / Tránh / Chế độ ăn -> Đề xuất sản phẩm THAY THẾ AN TOÀN có thật trong DB
+    if (p.isRestricted) {
+      if (titleLower.includes('nước mắm')) return 'Nước Tương Chin-su Tỏi Ớt 330ml';
+      if (titleLower.includes('sữa')) return 'Sữa đậu nành Fami Canxi 1L';
+      if (/(thịt|ba\s*chỉ|sườn|gà|bò|heo|cá|tôm|mực|chả)/i.test(titleLower)) return 'Đậu Hũ Non Hộp 220g';
+    }
+
+    // Nếu sản phẩm VƯỢT NGÂN SÁCH (ví dụ bao 5kg 110k -> gợi ý sản phẩm nhỏ/rẻ hơn 1kg)
+    if (p.isOverBudget) {
+      if (titleLower.includes('gạo')) return 'Gạo 1kg';
+      if (titleLower.includes('dầu ăn')) return 'Dầu ăn 1L';
+      if (titleLower.includes('nước mắm')) return 'Nước mắm';
+      if (titleLower.includes('sữa')) return 'Sữa 180ml';
+    }
+
+    if (titleLower.includes('gạo')) return 'Gạo';
+    if (titleLower.includes('nước mắm')) return 'Nước tương';
+    if (titleLower.includes('nước tương')) return 'Nước tương';
+    if (titleLower.includes('đậu hũ') || titleLower.includes('đậu phụ')) return 'Đậu hũ';
+    if (titleLower.includes('sữa')) return 'Sữa';
+    if (titleLower.includes('dầu ăn')) return 'Dầu ăn';
+    if (titleLower.includes('thịt heo') || titleLower.includes('ba chỉ') || titleLower.includes('sườn')) return 'Thịt heo';
+    if (titleLower.includes('thịt bò')) return 'Thịt bò';
+    if (titleLower.includes('thịt gà')) return 'Thịt gà';
+    if (titleLower.includes('bột')) return 'Bột';
+
+    const firstWord = title.split(' ')[0];
+    if (firstWord && firstWord.length >= 3) {
+      return firstWord;
+    }
+    return p.subcategoryName || 'sản phẩm cùng loại';
+  };
+
+  const suggestedTarget = getFallbackQuery(product);
+
   return (
     <View style={styles.container}>
       <View style={styles.productCardWrapper}>
@@ -55,11 +97,17 @@ const SearchResultItem = ({ product, index, getTagStyle, setCartCount }: SearchR
             </View>
             {product.isRestricted && (
               <TouchableOpacity
-                style={styles.violationBadge}
+                style={[
+                  styles.violationBadge,
+                  product.restrictionLabel?.includes('DỊ ỨNG') && { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }
+                ]}
                 onPress={() => setExpanded(!expanded)}
               >
-                <Text style={styles.violationText}>
-                  ⚠️ VI PHẠM CHẾ ĐỘ ĂN
+                <Text style={[
+                  styles.violationText,
+                  product.restrictionLabel?.includes('DỊ ỨNG') && { color: '#DC2626' }
+                ]}>
+                  {product.restrictionLabel || '⚠️ VI PHẠM CHẾ ĐỘ ĂN'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -92,15 +140,20 @@ const SearchResultItem = ({ product, index, getTagStyle, setCartCount }: SearchR
         {expanded && (
           <Animated.View entering={FadeInRight} style={styles.alternativeBox}>
              <Text style={styles.alternativeText}>
-                {product.altName ? (
-                  <>Gợi ý thay thế: <Text style={{fontWeight: '700', color: '#1E293B'}}>{product.altName}</Text></>
+                {product.isOverBudget ? (
+                  <>Gợi ý giá rẻ hơn: <Text style={{fontWeight: '700', color: '#1E293B'}}>{suggestedTarget}</Text></>
+                ) : product.isRestricted ? (
+                  <>Gợi ý thay thế: <Text style={{fontWeight: '700', color: '#1E293B'}}>{suggestedTarget}</Text></>
                 ) : (
-                  <>Gợi ý: Tìm <Text style={{fontWeight: '700', color: '#1E293B'}}>{product.subcategoryName || product.categoryName || 'sản phẩm cùng loại'}</Text> có giá tốt hơn</>
+                  <>Gợi ý: Tìm <Text style={{fontWeight: '700', color: '#1E293B'}}>{suggestedTarget}</Text></>
                 )}
              </Text>
              <TouchableOpacity style={styles.alternativeBtn} onPress={() => {
-                const query = product.altName || product.subcategoryName || product.categoryName || 'sản phẩm';
-                router.setParams({ query });
+                if (product.isOverBudget) {
+                  router.setParams({ query: suggestedTarget, sortBy: 'price_asc' });
+                } else {
+                  router.setParams({ query: suggestedTarget, sortBy: 'relevance' });
+                }
              }}>
                 <Text style={styles.alternativeBtnText}>Tìm ngay</Text>
              </TouchableOpacity>

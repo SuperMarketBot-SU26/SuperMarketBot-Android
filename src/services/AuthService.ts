@@ -1,5 +1,5 @@
 const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
-export const BASE_URL = ENV_API_URL || 'https://semiyearly-deloise-unsourly.ngrok-free.dev';
+export const BASE_URL = ENV_API_URL || 'http://192.168.1.175:5000';
 
 console.log('[AuthService] EXPO_PUBLIC_API_URL env =', ENV_API_URL);
 console.log('[AuthService] BASE_URL =', BASE_URL);

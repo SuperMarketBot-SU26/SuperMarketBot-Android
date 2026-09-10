@@ -19,7 +19,7 @@ const FILTERS = ['Tất cả sản phẩm'];
 
 export default function SearchScreenMain() {
   const router = useRouter();
-  const { query, mode } = useLocalSearchParams();
+  const { query, mode, sortBy } = useLocalSearchParams();
   const searchQuery = query;
   const insets = useSafeAreaInsets();
   const auth = useAuth();
@@ -83,6 +83,7 @@ export default function SearchScreenMain() {
 
         let userAllergies: string[] = [];
         let userAvoids: string[] = [];
+        let userDiets: string[] = [];
         let userSpendingLimit: number = auth?.profile?.spendingLimit || 0;
 
         if (isPersonal) {
@@ -93,6 +94,9 @@ export default function SearchScreenMain() {
             }
             if (Array.isArray(prefs?.avoids)) {
               userAvoids = prefs.avoids.map((p: any) => (p.tagName || '').toLowerCase());
+            }
+            if (Array.isArray(prefs?.preferreds)) {
+              userDiets = prefs.preferreds.map((p: any) => (p.tagName || '').toLowerCase());
             }
           } catch (e) {
             console.warn('[SearchScreenMain] Lỗi lấy health preferences:', e);
@@ -108,22 +112,10 @@ export default function SearchScreenMain() {
               if (auth.profile.spendingLimit) {
                 notes.push(`Ngân sách tối đa: ${auth.profile.spendingLimit.toLocaleString('vi-VN')}đ.`);
               }
-              try {
-                const prefs = await PersonalizationService.getHealthPreferences();
-                const diets = Array.isArray(prefs?.preferreds) ? prefs.preferreds.map((p: any) => p.tagName) : [];
-                const allergiesList = [
-                  ...(Array.isArray(prefs?.allergies) ? prefs.allergies : []),
-                  ...(Array.isArray(prefs?.avoids) ? prefs.avoids : [])
-                ];
-                const allergies = allergiesList.map((p: any) => p.tagName);
-
-                if (diets.length > 0 || allergies.length > 0) {
-                  notes.push(
-                    `HƯỚNG DẪN: Bước 1: Giữ thành phần thịt/cá nếu món gốc là món mặn (không tự đổi sang đồ chay trừ khi có yêu cầu ăn chay). Nếu có yêu cầu rẻ/tiết kiệm/dưới X tiền, ĐƯỢC PHÉP đổi sang loại thịt/cá rẻ hơn để đảm bảo ngân sách. Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU vi phạm, set "isRestricted": true và điền sản phẩm chay/an toàn vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.`
-                  );
-                }
-              } catch (e) {
-                console.warn('[SearchScreenMain] Lỗi lấy health preferences:', e);
+              if (userDiets.length > 0 || userAllergies.length > 0 || userAvoids.length > 0) {
+                notes.push(
+                  `CỰC KỲ QUAN TRỌNG: Người dùng có Chế độ ăn: [${userDiets.join(', ')}] và Dị ứng/Tránh: [${[...userAllergies, ...userAvoids].join(', ')}]. BẮT BUỘC GIỮ NGUYÊN TẤT CẢ NGUYÊN LIỆU GỐC CỦA MÓN ĂN TRONG DANH SÁCH "ingredients" (Bao gồm Thịt/Sườn/Cá/Nước mắm). TUYỆT ĐỐI KHÔNG TỰ XÓA HAY BỎ BỚT SẢN PHẨM THỊT/CÁ KHỎI DANH SÁCH. Nếu nguyên liệu gốc vi phạm chế độ ăn hoặc dị ứng, CHỈ ĐẶT "isRestricted": true và đưa sản phẩm chay/an toàn thay thế vào "altName".`
+                );
               }
               if (notes.length > 0) {
                 finalQuery = `${finalQuery} (Lưu ý: ${notes.join(' | ')})`;
@@ -142,6 +134,22 @@ export default function SearchScreenMain() {
 
               if (desc && desc.startsWith('[VI PHẠM]')) {
                 desc = desc.replace('[VI PHẠM]', '').trim();
+              }
+
+              // Kiểm tra an toàn bổ sung cho người dùng ăn chay
+              const pNameLower = (ing.productName || '').toLowerCase();
+              const isVeganUser = userDiets.some(d => d.includes('vegan') || d.includes('chay') || d.includes('vegetarian'));
+              const isMeatOrFish = /(^|\s)(thịt|ba\s*chỉ|sườn|gà|bò|heo|cá|tôm|mực|chả|nước\s*mắm)(\s|$|[.,])/i.test(pNameLower);
+
+              if (isPersonal && isVeganUser && isMeatOrFish) {
+                isRestricted = true;
+                if (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế') {
+                  if (pNameLower.includes('nước mắm')) {
+                    altName = 'Nước Tương Chin-su Tỏi Ớt 330ml';
+                  } else {
+                    altName = 'Đậu Hũ Non Hộp 220g';
+                  }
+                }
               }
 
               return {
@@ -167,14 +175,18 @@ export default function SearchScreenMain() {
           }
         } else if (isPersonal) {
           // Tìm kiếm từ khóa sản phẩm cá nhân hóa
+          const activeSortBy = (sortBy as string) || 'relevance';
           searchResults = await SearchService.searchPersonalized({
             q: searchQuery as string,
+            sortBy: activeSortBy,
             useAi: false,
           });
         } else {
           // Tìm kiếm tất cả thông thường (KHÔNG dùng AI, KHÔNG gắn tag cá nhân)
+          const activeSortBy = (sortBy as string) || 'relevance';
           searchResults = await SearchService.searchAll({
             q: searchQuery as string,
+            sortBy: activeSortBy,
             useAi: false,
           });
         }
@@ -200,19 +212,94 @@ export default function SearchScreenMain() {
             };
           }
 
-          // Tìm cá nhân hóa: Kiểm tra xem sản phẩm có vi phạm dị ứng hoặc ngân sách không
+          // 1. Kiểm tra HealthTags có sẵn trong DB
           const productHealthTags = Array.isArray(r.healthTags)
             ? r.healthTags.map((t: any) => (typeof t === 'string' ? t : t.tagName || '').toLowerCase())
             : [];
-          const hasConflict = productHealthTags.some((tag: string) => userAllergies.includes(tag) || userAvoids.includes(tag));
+          const hasTagConflict = productHealthTags.some((tag: string) =>
+            userAllergies.some(a => tag.includes(a) || a.includes(tag)) ||
+            userAvoids.some(a => tag.includes(a) || a.includes(tag))
+          );
+
+          // 2. Kiểm tra Keyword & Alias từ tên/mô tả/danh mục sản phẩm nếu DB chưa gắn healthTags đầy đủ
+          const fullNameText = `${r.productName || ''} ${r.description || ''} ${r.categoryName || ''} ${r.subcategoryName || ''} ${r.productTypeName || ''}`.toLowerCase();
+          
+          const ALLERGY_ALIASES: Record<string, string[]> = {
+            'sữa': ['sữa', 'milk', 'yogurt', 'phô mai', 'cheese', 'bơ', 'butter', 'cream', 'kem', 'lactose', 'whey'],
+            'sữa tươi': ['sữa', 'sữa tươi', 'milk', 'fresh milk'],
+            'đậu nành': ['đậu nành', 'soy', 'soya', 'tofu', 'đậu hũ'],
+            'đậu phộng': ['đậu phộng', 'lạc', 'peanut'],
+            'hạt': ['hạt', 'nut', 'almond', 'óc chó', 'hạt dẻ', 'cashew', 'macca'],
+            'các loại hạt': ['hạt', 'nut', 'almond', 'óc chó', 'hạt dẻ', 'cashew', 'macca'],
+            'gluten': ['gluten', 'lúa mì', 'wheat', 'bột mì'],
+            'hải sản': ['hải sản', 'tôm', 'cua', 'ốc', 'sò', 'mực', 'seafood', 'shrimp', 'crab'],
+            'hải sản có vỏ': ['hải sản', 'tôm', 'cua', 'ốc', 'sò', 'seafood', 'shrimp', 'crab'],
+            'trứng': ['trứng', 'egg'],
+          };
+
+          let matchedAllergy = userAllergies.find(allergy => {
+            const clean = allergy.replace(/dị\s*ứng/gi, '').trim().toLowerCase();
+            if (clean.length <= 1) return false;
+            if (fullNameText.includes(clean)) return true;
+            const aliases = ALLERGY_ALIASES[clean] || [];
+            return aliases.some(alias => fullNameText.includes(alias));
+          });
+          if (!matchedAllergy) {
+            matchedAllergy = userAvoids.find(avoid => {
+              const clean = avoid.replace(/tránh/gi, '').trim().toLowerCase();
+              if (clean.length <= 1) return false;
+              if (fullNameText.includes(clean)) return true;
+              const aliases = ALLERGY_ALIASES[clean] || [];
+              return aliases.some(alias => fullNameText.includes(alias));
+            });
+          }
+
+          const hasKeywordConflict = !!matchedAllergy;
+          const isAllergyConflict = hasTagConflict || hasKeywordConflict;
+
+          // 3. Kiểm tra Chế độ ăn (Diet) như Vegan / Ăn chay / Vegetarian
+          const productNameOnly = (r.productName || '').toLowerCase();
+          const isExplicitVegan = /(^|\s)(gạo|nước\s*tương|đậu\s*hũ|đậu\s*phụ|chay|nấm|thực\s*vật|rau|củ|quả|trái|dầu\s*ăn|đường|muối|tiêu|bột)(\s|$|[.,])/i.test(productNameOnly);
+          const isVeganUser = userDiets.some(d => d.includes('vegan') || d.includes('chay') || d.includes('vegetarian'));
+          const isMeatOrFish = !isExplicitVegan && /(^|\s)(thịt|ba\s*chỉ|sườn|gà|bò|heo|cá|tôm|mực|chả|nước\s*mắm)(\s|$|[.,])/i.test(productNameOnly);
+          const isDietConflict = isVeganUser && isMeatOrFish;
+
+          const isRestricted = r.isRestricted || isAllergyConflict || isDietConflict;
           const isOverBudget = userSpendingLimit > 0 && (r.promotionPrice ?? r.unitPrice ?? 0) > userSpendingLimit;
+
+          let restrictionLabel = r.restrictionLabel;
+          if (!restrictionLabel || restrictionLabel === '⚠️ VI PHẠM CHẾ ĐỘ ĂN') {
+            if (isAllergyConflict) {
+              const allergyName = matchedAllergy 
+                ? matchedAllergy.replace(/dị\s*ứng/gi, '').trim() 
+                : (userAllergies[0] ? userAllergies[0].replace(/dị\s*ứng/gi, '').trim() : 'sản phẩm');
+              restrictionLabel = `⚠️ DỊ ỨNG ${allergyName.toUpperCase()}`;
+            } else if (isDietConflict || isRestricted) {
+              restrictionLabel = '⚠️ VI PHẠM CHẾ ĐỘ ĂN';
+            }
+          }
+
+          let altName = r.altName;
+          if (isRestricted && (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế')) {
+            if (productNameOnly.includes('nước mắm')) {
+              altName = 'Nước Tương Chin-su Tỏi Ớt 330ml';
+            } else if (isMeatOrFish) {
+              altName = 'Đậu Hũ Non Hộp 220g';
+            }
+          }
 
           return {
             ...r,
-            isRestricted: r.isRestricted || hasConflict,
+            isRestricted,
+            restrictionLabel,
             isOverBudget: r.isOverBudget || isOverBudget,
+            altName,
           };
         });
+
+        if (activeSortBy === 'price_asc' && userSpendingLimit > 0) {
+          processedResults = processedResults.filter(r => !r.isOverBudget);
+        }
 
         setResults(processedResults);
         setAiRanked(searchResults.aiRanked || false);
@@ -239,7 +326,7 @@ export default function SearchScreenMain() {
     };
 
     performSearch();
-  }, [searchQuery, mode, auth?.profile?.memberId]);
+  }, [searchQuery, mode, sortBy, auth?.profile?.memberId]);
 
   const getTagStyle = (type: string) => {
     switch (type) {
@@ -261,7 +348,8 @@ export default function SearchScreenMain() {
       tags.push({ text: 'GIẢM GIÁ', type: 'discount' });
     }
     if (tags.length === 0) {
-      tags.push({ text: item.status === 'instock' ? 'CÒN HÀNG' : 'HẾT HÀNG', type: 'popular' });
+      const isAvailable = !item.status || item.status.toLowerCase() === 'instock' || item.status.toLowerCase() === 'available' || item.status.toLowerCase() === 'active';
+      tags.push({ text: isAvailable ? 'CÒN HÀNG' : 'HẾT HÀNG', type: 'popular' });
     }
 
     const currentPrice = item.promotionPrice ?? item.unitPrice ?? 0;
@@ -279,6 +367,7 @@ export default function SearchScreenMain() {
       reviews: Math.floor(Math.random() * 80) + 20,
       price,
       isRestricted: item.isRestricted,
+      restrictionLabel: item.restrictionLabel,
       isOverBudget,
       altName: item.altName,
       categoryName: item.categoryName,

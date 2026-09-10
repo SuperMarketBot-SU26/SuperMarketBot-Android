@@ -15,6 +15,7 @@ export interface SearchResultItemDto {
   relevanceScore: number;
   healthTags: string[];
   isRestricted?: boolean;
+  restrictionLabel?: string;
   altName?: string | null;
   isOverBudget?: boolean;
 }

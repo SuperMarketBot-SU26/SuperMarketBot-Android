@@ -654,15 +654,15 @@ export default function CartScreenMain() {
         {/* AI Camera Photo Capture Modal */}
         <Modal visible={isScanningLocation} animationType="slide" onRequestClose={() => setIsScanningLocation(false)}>
           <View style={{ flex: 1, backgroundColor: 'black' }}>
-            <SafeAreaView style={{ flex: 1, position: 'relative' }}>
-              <CameraView
-                ref={(ref) => {
-                  cameraRef.current = ref;
-                }}
-                style={{ flex: 1 }}
-                facing="back"
-                onCameraReady={() => setIsCameraReady(true)}
-              />
+            <CameraView
+              ref={(ref) => {
+                cameraRef.current = ref;
+              }}
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              onCameraReady={() => setIsCameraReady(true)}
+            />
+            <SafeAreaView style={{ flex: 1 }} pointerEvents="box-none">
               {/* Header Banner Guide */}
               <View style={{
                 position: 'absolute', top: 50, left: 20, right: 20,
