@@ -161,4 +161,35 @@ export class SearchService {
       return { ingredients: [] };
     }
   }
+
+  static async transcribeSpeech(audioUri: string): Promise<string> {
+    try {
+      const token = await SecureStore.getItemAsync('userToken');
+      const formData = new FormData();
+      formData.append('file', {
+        uri: audioUri,
+        name: 'voice_recording.m4a',
+        type: 'audio/m4a',
+      } as any);
+
+      const response = await fetch(`${BASE_URL}/api/search/speech-to-text`, {
+        method: 'POST',
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Speech-to-text error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.text || '';
+    } catch (err) {
+      console.error('[SearchService.transcribeSpeech] Error:', err);
+      return '';
+    }
+  }
 }

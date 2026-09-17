@@ -1,11 +1,12 @@
 import Voice from '@react-native-voice/voice';
+import { Audio } from 'expo-av';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { AlertTriangle, Bell, Bot, CheckCircle2, Home, Lock, Map, Mic, Plus, Search, ShoppingBag, ShoppingCart, Sparkles, User, X, Zap } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, FlatList, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Modal, NativeModules, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, FlatList, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import ProductCard from './ProductCard';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -153,50 +154,63 @@ export default function HomeScreenMain() {
 
   const isMounted = React.useRef(true);
 
+  const isVoiceAvailable = (): boolean => {
+    try {
+      const vm = NativeModules?.Voice || NativeModules?.RCTVoice;
+      return !!(vm && typeof vm.startSpeech === 'function');
+    } catch (err) {
+      return false;
+    }
+  };
+
   useEffect(() => {
     isMounted.current = true;
-    try {
-      Voice.removeAllListeners();
-      Voice.onSpeechStart = () => { if (isMounted.current) setIsListening(true); };
-      Voice.onSpeechEnd = () => { if (isMounted.current) setIsListening(false); };
-      Voice.onSpeechPartialResults = (e) => {
-        if (isMounted.current && e.value && e.value.length > 0) {
-          setVoiceText(e.value[0]);
-        }
-      };
-      Voice.onSpeechResults = (e) => {
-        if (isMounted.current && e.value && e.value.length > 0) {
-          const resultText = e.value[0];
-          if (/[\u4e00-\u9fa5]/.test(resultText)) {
-            console.warn('Chinese noise ignored');
-            return;
+    if (isVoiceAvailable()) {
+      try {
+        Voice.removeAllListeners();
+        Voice.onSpeechStart = () => { if (isMounted.current) setIsListening(true); };
+        Voice.onSpeechEnd = () => { if (isMounted.current) setIsListening(false); };
+        Voice.onSpeechPartialResults = (e) => {
+          if (isMounted.current && e.value && e.value.length > 0) {
+            setVoiceText(e.value[0]);
           }
-          setVoiceText(resultText);
-          setTimeout(() => {
-            if (isMounted.current) {
-              setIsListening(false);
-              const cleanedQuery = cleanSearchQuery(resultText);
-              if (cleanedQuery) {
-                router.push({ pathname: '/search', params: { query: cleanedQuery, mode: searchMode } });
-              }
+        };
+        Voice.onSpeechResults = (e) => {
+          if (isMounted.current && e.value && e.value.length > 0) {
+            const resultText = e.value[0];
+            if (/[\u4e00-\u9fa5]/.test(resultText)) {
+              console.warn('Chinese noise ignored');
+              return;
             }
-          }, 1000);
-        }
-      };
-      Voice.onSpeechError = (e) => {
-        if (isMounted.current) {
-          setIsListening(false);
-          ToastAndroid.show('Không thể nhận diện giọng nói', ToastAndroid.SHORT);
-        }
-      };
-    } catch (err) {
-      console.warn("Voice module not available yet", err);
+            setVoiceText(resultText);
+            setTimeout(() => {
+              if (isMounted.current) {
+                setIsListening(false);
+                const cleanedQuery = cleanSearchQuery(resultText);
+                if (cleanedQuery) {
+                  router.push({ pathname: '/search', params: { query: cleanedQuery, mode: searchMode } });
+                }
+              }
+            }, 1000);
+          }
+        };
+        Voice.onSpeechError = (e) => {
+          if (isMounted.current) {
+            setIsListening(false);
+            ToastAndroid.show('Không thể nhận diện giọng nói', ToastAndroid.SHORT);
+          }
+        };
+      } catch (err) {
+        console.warn("Voice module not available yet", err);
+      }
     }
     return () => {
       isMounted.current = false;
-      try {
-        Voice.destroy().then(() => Voice.removeAllListeners());
-      } catch (err) { }
+      if (isVoiceAvailable()) {
+        try {
+          Voice.destroy().then(() => Voice.removeAllListeners()).catch(() => {});
+        } catch (err) { }
+      }
     };
   }, [searchMode]);
 
@@ -213,72 +227,108 @@ export default function HomeScreenMain() {
     }
   }, [isListening]);
 
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
   const startListening = async () => {
     try {
       setVoiceText('');
       setIsListening(true);
-      if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          {
-            title: 'Quyền truy cập Micro',
-            message: 'Ứng dụng cần sử dụng micro để tìm kiếm bằng giọng nói.',
-            buttonNeutral: 'Hỏi lại sau',
-            buttonNegative: 'Từ chối',
-            buttonPositive: 'Cho phép',
-          }
-        );
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          ToastAndroid.show('Quyền micro bị từ chối, chuyển sang giọng nói mô phỏng', ToastAndroid.SHORT);
-          setTimeout(() => setVoiceText('Sữa chua không đường'), 1500);
-          setTimeout(() => {
-            setIsListening(false);
-            router.push({ pathname: '/search', params: { query: 'Sữa chua không đường', mode: searchMode } });
-          }, 3000);
-          return;
-        }
-      }
-      try {
-        await Voice.cancel();
-        await Voice.destroy();
-      } catch (err) { }
 
-      const isAvailable = await Voice.isAvailable().catch(() => false);
-      if (!isAvailable) {
-        ToastAndroid.show('Mô phỏng Voice (Thiết bị dùng MI AI không hỗ trợ vi-VN)', ToastAndroid.SHORT);
-        setTimeout(() => setVoiceText('Sữa chua không đường'), 1500);
-        setTimeout(() => {
-          if (isMounted.current) {
-            setIsListening(false);
-            router.push({ pathname: '/search', params: { query: 'Sữa chua không đường', mode: searchMode } });
-          }
-        }, 3000);
+      if (isVoiceAvailable()) {
+        try {
+          await Voice.cancel();
+          await Voice.destroy();
+        } catch (err) { }
+        await Voice.start('vi-VN');
         return;
       }
 
-      await Voice.start('vi-VN');
-    } catch (e) {
-      console.error(e);
-      ToastAndroid.show('Mô phỏng Voice (chưa link native module)', ToastAndroid.SHORT);
-      setTimeout(() => setVoiceText('Sữa chua không đường'), 2000);
-      setTimeout(() => {
+      // Fallback to real expo-av Audio recording for Expo Go
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        ToastAndroid.show('Quyền micro bị từ chối', ToastAndroid.SHORT);
         setIsListening(false);
-        router.push({ pathname: '/search', params: { query: 'Sữa chua không đường', mode: searchMode } });
-      }, 3500);
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setIsRecordingAudio(true);
+      setVoiceText('Đang thu âm giọng nói của bạn...');
+    } catch (e) {
+      console.error('Audio recording start error:', e);
+      ToastAndroid.show('Không thể khởi chạy micro ghi âm', ToastAndroid.SHORT);
+      setIsListening(false);
     }
   };
 
   const stopListening = async () => {
     try {
-      setIsListening(false);
-      await Voice.stop();
-      await Voice.destroy();
-      if (voiceText) {
-        const cleaned = cleanSearchQuery(voiceText);
-        router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+      if (isVoiceAvailable()) {
+        setIsListening(false);
+        await Voice.stop().catch(() => {});
+        await Voice.destroy().catch(() => {});
+        if (voiceText) {
+          const cleaned = cleanSearchQuery(voiceText);
+          router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+        }
+        return;
+      }
+
+      if (!recordingRef.current) {
+        setIsListening(false);
+        setIsRecordingAudio(false);
+        return;
+      }
+
+      setIsTranscribing(true);
+      setVoiceText('⚡ AI đang chuyển lời nói thành chữ...');
+
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+      setIsRecordingAudio(false);
+
+      if (uri) {
+        const text = await SearchService.transcribeSpeech(uri);
+        if (text && isMounted.current) {
+          setVoiceText(text);
+          setTimeout(() => {
+            if (isMounted.current) {
+              setIsListening(false);
+              setIsTranscribing(false);
+              const cleaned = cleanSearchQuery(text);
+              if (cleaned) {
+                router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+              }
+            }
+          }, 800);
+        } else {
+          setVoiceText('Chưa nghe rõ lời nói, vui lòng thử lại.');
+          setTimeout(() => {
+            if (isMounted.current) {
+              setIsListening(false);
+              setIsTranscribing(false);
+            }
+          }, 1500);
+        }
+      } else {
+        setIsListening(false);
+        setIsTranscribing(false);
       }
     } catch (e) {
+      console.error('Audio recording stop error:', e);
       setIsListening(false);
+      setIsTranscribing(false);
     }
   };
 
@@ -803,29 +853,18 @@ export default function HomeScreenMain() {
                 </View>
               ))
             ) : (
-              <View style={styles.smartCard}>
-                <View style={styles.smartCardImageWrapper}>
-                  <Image source={{ uri: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?q=80&w=600&auto=format&fit=crop' }} style={styles.smartCardImage} />
-                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)']} style={styles.smartCardOverlay}>
-                    <View style={styles.smartBadge}>
-                      <Text style={styles.smartBadgeText} numberOfLines={1}>Lập kế hoạch bữa ăn thông minh</Text>
-                    </View>
-                    <Text style={styles.smartCardTitle} numberOfLines={1}> Salad cá hồi sốt cam chanh</Text>
-                  </LinearGradient>
-                </View>
-                <View style={styles.smartCardFooter}>
-                  <Text style={styles.smartCardDesc}>
-                    Ngân sách tối đa: {profile?.spendingLimit ? profile.spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa thiết lập'}
-                  </Text>
-                  <View style={styles.smartCardActions}>
-                    <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/robots')}>
-                      <Text style={styles.btnPrimaryText}>Xem lộ trình</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.btnSecondary}>
-                      <Text style={styles.btnSecondaryText}>Tối ưu</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+              <View style={[styles.smartCard, { width: width * 0.85, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', borderWidth: 1 }]}>
+                <Sparkles color="#10B981" size={28} style={{ marginBottom: 10 }} />
+                <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#065F46', marginBottom: 6, textAlign: 'center' }}>Gợi ý bữa ăn thông minh AI</Text>
+                <Text style={{ fontSize: 12, color: '#047857', textAlign: 'center', marginBottom: 12 }}>
+                  Hệ thống đang sẵn sàng tạo thực đơn phù hợp nhất với ngân sách và chế độ ăn của bạn.
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.btnPrimary, { paddingHorizontal: 16, paddingVertical: 8 }]} 
+                  onPress={() => fetchMeals()}
+                >
+                  <Text style={[styles.btnPrimaryText, { fontSize: 12 }]}>Tải lại gợi ý AI</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -1028,14 +1067,18 @@ export default function HomeScreenMain() {
           <View style={styles.voiceModalContent}>
             <View style={{ position: 'relative', width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
               <RNAnimated.View style={[styles.voicePulseCircle, { transform: [{ scale: pulseAnim }] }]} />
-              <View style={styles.voiceMicContainer}>
-                <Mic color="white" size={32} />
+              <View style={[styles.voiceMicContainer, isTranscribing && { backgroundColor: '#F59E0B' }]}>
+                {isTranscribing ? <ActivityIndicator size="small" color="white" /> : <Mic color="white" size={32} />}
               </View>
             </View>
-            <Text style={styles.voiceListeningText}>Đang nghe...</Text>
-            <Text style={styles.voiceResultText}>{voiceText || 'Hãy nói nội dung bạn muốn tìm kiếm'}</Text>
-            <TouchableOpacity style={styles.voiceCancelBtn} onPress={stopListening}>
-              <Text style={styles.voiceCancelBtnText}>Dừng lại</Text>
+            <Text style={styles.voiceListeningText}>{isTranscribing ? 'Đang phân tích AI...' : 'Đang thu âm giọng nói...'}</Text>
+            <Text style={styles.voiceResultText}>{voiceText || 'Hãy nói nội dung bạn muốn tìm kiếm (ví dụ: "Tôi muốn nấu món canh chua cá")'}</Text>
+            <TouchableOpacity 
+              style={[styles.voiceCancelBtn, isTranscribing && { opacity: 0.6 }]} 
+              onPress={stopListening}
+              disabled={isTranscribing}
+            >
+              <Text style={styles.voiceCancelBtnText}>{isTranscribing ? 'Đang phân tích...' : 'Dừng & Tìm kiếm'}</Text>
             </TouchableOpacity>
           </View>
         </View>
