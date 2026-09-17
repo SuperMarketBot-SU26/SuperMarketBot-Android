@@ -1,11 +1,10 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { Bot, Cake, ChevronLeft, ChevronRight, Clock, Gift, Home, Map, Medal, Navigation, Percent, Search, ShoppingBag, Sparkles, Star, Truck, User } from 'lucide-react-native';
-import React, { useState, useCallback } from 'react';
-import { ImageBackground, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { ChevronLeft, ChevronRight, Home, Map, Medal, Percent, ShoppingBag, Sparkles, Star, User } from 'lucide-react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ProfileService, ProfileDto } from '../../services/ProfileService';
 import { useAuth } from '../../context/AuthContext';
 
 const getTierTheme = (tier: string) => {
@@ -49,10 +48,10 @@ const getProgressDetails = (totalSpent: number, isPremium: boolean = false) => {
 const isTierActive = (userTier: string, tierName: string) => {
   const ut = userTier ? userTier.toLowerCase() : '';
   const tn = tierName.toLowerCase();
-  
+
   if (tn === 'medium' && (ut.includes('medium') || ut === '')) return true;
   if (tn === 'premium' && ut.includes('premium')) return true;
-  
+
   return false;
 };
 
@@ -60,29 +59,8 @@ const getTierPrivileges = (tier: string) => {
   const t = tier ? tier.toLowerCase() : '';
   const mediumPrivileges = [
     {
-      title: 'Tương tác với robot',
-      desc: 'Trải nghiệm mua sắm thông minh cùng robot',
-      icon: Bot,
-      iconBg: '#DBEAFE',
-      iconColor: '#2563EB',
-    },
-    {
-      title: 'Tìm kiếm nguyên liệu bằng AI',
-      desc: 'Tìm kiếm nhanh chóng món ăn và nguyên liệu',
-      icon: Search,
-      iconBg: '#F1F5F9',
-      iconColor: '#64748B',
-    },
-    {
-      title: 'Chỉ đường đến các nguyên liệu',
-      desc: 'Robot dẫn đường trực tiếp đến kệ hàng',
-      icon: Navigation,
-      iconBg: '#ECFDF5',
-      iconColor: '#10B981',
-    },
-    {
-      title: 'Sản phẩm khuyến mãi',
-      desc: 'Cập nhật nhanh các sản phẩm đang giảm giá',
+      title: 'Sản phẩm khuyến mãi cá nhân hoá',
+      desc: 'Cập nhật nhanh các sản phẩm đang giảm giá dành riêng cho bạn',
       icon: Percent,
       iconBg: '#FFEDD5',
       iconColor: '#EA580C',
@@ -115,7 +93,7 @@ const getTierPrivileges = (tier: string) => {
       },
     ];
   }
-  
+
   return mediumPrivileges;
 };
 
@@ -226,7 +204,7 @@ export default function MemberTierScreenMain() {
                     <Text style={styles.progressTitle}>Tiến trình thăng hạng</Text>
                     <Text style={styles.progressSubtitle}>
                       {isPremium || progress.percent >= 100
-                        ? 'Bạn đã đạt hạng Premium cao nhất!' 
+                        ? 'Bạn đã đạt hạng Premium cao nhất!'
                         : `Còn ${progress.remaining.toLocaleString('vi-VN')}đ để đạt ${progress.nextTier}`}
                     </Text>
                   </View>
