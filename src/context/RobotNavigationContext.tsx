@@ -13,24 +13,24 @@
  *   - "status"            { robotCode, battery, location, status, mode, isOnline, timestampUtc }
  */
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  ReactNode,
-} from 'react';
 import * as signalR from '@microsoft/signalr';
 import * as SecureStore from 'expo-secure-store';
-import { BASE_URL } from '../services/AuthService';
 import {
-  RobotService,
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { BASE_URL } from '../services/AuthService';
+import { NavigationService } from '../services/NavigationService';
+import {
   RobotNavigationStatusDto,
+  RobotService,
   RobotStatusSignalRDto,
 } from '../services/RobotService';
-import { NavigationService } from '../services/NavigationService';
 import { useAuth } from './AuthContext';
 
 // --- Types -------------------------------------------------------------------
@@ -82,11 +82,11 @@ const RobotNavigationContext = createContext<RobotNavigationContextProps>({
   robotHubConnection: null,
   toasts: [],
   dispatchNavigate: async () => ({ success: false, message: '' }),
-  joinRobotGroup: async () => {},
-  dismissToast: () => {},
-  resetNavState: () => {},
+  joinRobotGroup: async () => { },
+  dismissToast: () => { },
+  resetNavState: () => { },
   onRobotReached: null,
-  setOnRobotReached: () => {},
+  setOnRobotReached: () => { },
 });
 
 export const useRobotNavigation = () => useContext(RobotNavigationContext);
@@ -195,9 +195,9 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
       });
 
       // Silence warnings for telemetry and robotlog
-      connection.on('telemetry', () => {});
-      connection.on('robotlog', () => {});
-      connection.on('zoneentered', () => {});
+      connection.on('telemetry', () => { });
+      connection.on('robotlog', () => { });
+      connection.on('zoneentered', () => { });
 
       try {
         await connection.start();
@@ -227,9 +227,9 @@ export const RobotNavigationProvider = ({ children }: { children: ReactNode }) =
 
     return () => {
       isMounted = false;
-      connection?.stop().catch(() => {});
+      connection?.stop().catch(() => { });
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // --- joinRobotGroup ----------------------------------------------------------

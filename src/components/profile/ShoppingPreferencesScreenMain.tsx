@@ -1,15 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, TextInput, PanResponder } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, HelpCircle, Utensils, AlertTriangle, Wallet, Leaf, FlaskConical, Zap, UtensilsCrossed, Flame, RefreshCw, Fish, Clock, Dumbbell, TrendingDown, Save, Info } from 'lucide-react-native';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { AlertTriangle, ChevronLeft, Info, Save, Utensils, Wallet } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
+import { PanResponder, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PersonalizationService, HealthPreferenceItemDto } from '../../services/PersonalizationService';
-import { ProfileService } from '../../services/ProfileService';
+import { ActivityIndicator, ToastAndroid } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { ToastAndroid, ActivityIndicator } from 'react-native';
+import { HealthPreferenceItemDto, PersonalizationService } from '../../services/PersonalizationService';
 
 import * as Icons from 'lucide-react-native';
 
@@ -23,7 +22,7 @@ export default function ShoppingPreferencesScreenMain() {
   const router = useRouter();
 
   const { profile } = useAuth();
-  
+
   const [availableDiets, setAvailableDiets] = useState<HealthItem[]>([]);
   const [availableAllergies, setAvailableAllergies] = useState<HealthItem[]>([]);
   const [selectedDiets, setSelectedDiets] = useState<string[]>([]);
@@ -38,7 +37,7 @@ export default function ShoppingPreferencesScreenMain() {
       try {
         setIsLoading(true);
         const tags = await PersonalizationService.getHealthTags();
-        
+
         const dietTags = tags
           .filter(t => t.tagType && t.tagType.toLowerCase() === 'diet')
           .map(t => ({
@@ -46,7 +45,7 @@ export default function ShoppingPreferencesScreenMain() {
             name: t.tagName,
             icon: (Icons as any)[t.iconName || ''] || Icons.UtensilsCrossed
           }));
-        
+
         const allergyTags = tags
           .filter(t => t.tagType && (t.tagType.toLowerCase() === 'allergen' || t.tagType.toLowerCase() === 'allergy' || t.tagType.toLowerCase() === 'ingredient'))
           .map(t => ({
@@ -155,7 +154,7 @@ export default function ShoppingPreferencesScreenMain() {
       setIsSaving(true);
       // Cập nhật health preferences
       const preferences: HealthPreferenceItemDto[] = [];
-      
+
       // Diets
       selectedDiets.forEach(id => {
         preferences.push({ healthTagId: Number(id), status: 'Preferred' });
@@ -319,7 +318,7 @@ export default function ShoppingPreferencesScreenMain() {
               <View style={styles.budgetTipBox}>
                 <Info color="#059669" size={16} style={{ marginTop: 2 }} />
                 <Text style={styles.budgetTipText}>
-                  "Với ngân sách này, bạn có thể mua đủ thực phẩm Organic cho gia đình 4 người trong 1 tuần!"
+                  "Ngân sách tối đa bạn có thể chi trả cho 1 đơn hàng"
                 </Text>
               </View>
             </View>

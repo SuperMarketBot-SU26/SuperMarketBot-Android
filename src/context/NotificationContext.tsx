@@ -1,10 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as signalR from '@microsoft/signalr';
-import * as SecureStore from 'expo-secure-store';
+import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { BASE_URL } from '../services/AuthService';
-import { NotificationService, NotificationDto } from '../services/NotificationService';
+import { NotificationDto, NotificationService } from '../services/NotificationService';
 import { useAuth } from './AuthContext';
-import { CartDto } from '../services/CartService';
 
 interface NotificationContextProps {
   unreadCount: number;

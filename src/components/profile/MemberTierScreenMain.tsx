@@ -29,22 +29,22 @@ const getTierTheme = (tier: string) => {
   };
 };
 
-const getProgressDetails = (totalSpent: number) => {
+const getProgressDetails = (totalSpent: number, isPremium: boolean = false) => {
   const THRESHOLD = 10000000;
-  if (totalSpent < THRESHOLD) {
+  if (isPremium || totalSpent >= THRESHOLD) {
     return {
       nextTier: 'Premium',
-      remaining: THRESHOLD - totalSpent,
-      percent: (totalSpent / THRESHOLD) * 100,
-    };
-  } else {
-    return {
-      nextTier: 'Tối đa',
       remaining: 0,
       percent: 100,
     };
   }
+  return {
+    nextTier: 'Premium',
+    remaining: THRESHOLD - totalSpent,
+    percent: Math.min((totalSpent / THRESHOLD) * 100, 100),
+  };
 };
+
 
 const isTierActive = (userTier: string, tierName: string) => {
   const ut = userTier ? userTier.toLowerCase() : '';
@@ -175,12 +175,14 @@ export default function MemberTierScreenMain() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {(() => {
-            const theme = getTierTheme(profile?.membershipTier || '');
-            const progress = getProgressDetails(profile?.totalSpent || 0);
-            const privileges = getTierPrivileges(profile?.membershipTier || '');
             const rawTier = profile?.membershipTier || '';
-            const userTier = rawTier.toLowerCase().includes('premium') ? 'Premium' : 'Medium';
-            
+            const isPremium = rawTier.toLowerCase().includes('premium');
+            const userTier = isPremium ? 'Premium' : 'Medium';
+            const theme = getTierTheme(profile?.membershipTier || '');
+            const effectiveSpent = isPremium ? Math.max(profile?.totalSpent || 0, 10000000) : (profile?.totalSpent || 0);
+            const progress = getProgressDetails(effectiveSpent, isPremium);
+            const privileges = getTierPrivileges(profile?.membershipTier || '');
+
             return (
               <>
                 {/* Member Card */}
@@ -211,7 +213,7 @@ export default function MemberTierScreenMain() {
                       <View style={[styles.pointsBox, { backgroundColor: 'rgba(255, 255, 255, 0.9)' }]}>
                         <Text style={[styles.pointsLabel, { color: theme.textColor, opacity: 0.8 }]}>TỔNG CHI TIÊU</Text>
                         <Text style={[styles.pointsValue, { color: theme.textColor === '#FFFFFF' ? '#0284C7' : theme.textColor }]}>
-                          {(profile?.totalSpent || 0).toLocaleString('vi-VN')}đ
+                          {effectiveSpent.toLocaleString('vi-VN')}đ
                         </Text>
                       </View>
                     </View>
@@ -223,11 +225,12 @@ export default function MemberTierScreenMain() {
                   <View style={styles.progressHeader}>
                     <Text style={styles.progressTitle}>Tiến trình thăng hạng</Text>
                     <Text style={styles.progressSubtitle}>
-                      {progress.remaining > 0 
-                        ? `Còn ${progress.remaining.toLocaleString('vi-VN')}đ để đạt ${progress.nextTier}` 
-                        : 'Bạn đã đạt hạng cao nhất!'}
+                      {isPremium || progress.percent >= 100
+                        ? 'Bạn đã đạt hạng Premium cao nhất!' 
+                        : `Còn ${progress.remaining.toLocaleString('vi-VN')}đ để đạt ${progress.nextTier}`}
                     </Text>
                   </View>
+
 
                   <View style={styles.progressBarContainer}>
                     <View style={styles.progressBarBg} />

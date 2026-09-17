@@ -1,8 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Camera, CheckCircle2, Clock, Home, Leaf, LogOut, Map, Medal, PartyPopper, QrCode, Settings, ShoppingBag, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User, Wifi } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Camera, Clock, Home, LogOut, Map, Medal, Settings, ShoppingBag as ShoppingBagIcon, SlidersHorizontal, User, Wifi } from 'lucide-react-native';
+import { useCallback, useState } from 'react';
+import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -76,26 +76,26 @@ export default function ProfileScreenMain() {
 
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-          {/* User Info */}
-          <Animated.View entering={FadeInDown.delay(100)} style={styles.userInfoSection}>
-            <TouchableOpacity 
-              style={styles.avatarContainer}
-              activeOpacity={0.8}
-              onPress={() => router.push('/personal-info')}
-            >
-              <Image source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }} style={styles.avatar} />
-              <View style={[styles.verifiedBadge, { backgroundColor: '#059669' }]}>
-                <Camera color="white" size={12} />
+            {/* User Info */}
+            <Animated.View entering={FadeInDown.delay(100)} style={styles.userInfoSection}>
+              <TouchableOpacity
+                style={styles.avatarContainer}
+                activeOpacity={0.8}
+                onPress={() => router.push('/personal-info')}
+              >
+                <Image source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }} style={styles.avatar} />
+                <View style={[styles.verifiedBadge, { backgroundColor: '#059669' }]}>
+                  <Camera color="white" size={12} />
+                </View>
+              </TouchableOpacity>
+              <View style={styles.userDetails}>
+                <Text style={styles.userName}>{profile?.fullName || 'Đang tải...'}</Text>
+                <View style={styles.userTierRow}>
+                  <Medal color="#059669" size={14} />
+                  <Text style={styles.userTierText}>{profile?.membershipTier || 'Đang tải...'}</Text>
+                </View>
               </View>
-            </TouchableOpacity>
-            <View style={styles.userDetails}>
-              <Text style={styles.userName}>{profile?.fullName || 'Đang tải...'}</Text>
-              <View style={styles.userTierRow}>
-                <Medal color="#059669" size={14} />
-                <Text style={styles.userTierText}>{profile?.membershipTier || 'Đang tải...'}</Text>
-              </View>
-            </View>
-          </Animated.View>
+            </Animated.View>
 
             {/* Membership Card */}
             <Animated.View entering={FadeInDown.delay(200)}>
@@ -156,9 +156,14 @@ export default function ProfileScreenMain() {
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={{ color: theme.textColor, opacity: 0.7, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Tổng chi tiêu</Text>
                         <Text style={{ color: theme.textColor, fontSize: 20, fontWeight: '700' }}>
-                          {profile?.totalSpent !== undefined ? profile.totalSpent.toLocaleString('vi-VN') : '0'}<Text style={{ fontSize: 14 }}> đ</Text>
+                          {(() => {
+                            const isPremium = (profile?.membershipTier || '').toLowerCase().includes('premium');
+                            const effectiveSpent = isPremium ? Math.max(profile?.totalSpent || 0, 10000000) : (profile?.totalSpent || 0);
+                            return effectiveSpent.toLocaleString('vi-VN');
+                          })()}<Text style={{ fontSize: 14 }}> đ</Text>
                         </Text>
                       </View>
+
                     </View>
                   </LinearGradient>
                 );
@@ -206,7 +211,7 @@ export default function ProfileScreenMain() {
                 </View>
                 <View style={styles.menuTextContainer}>
                   <Text style={styles.menuItemTitle}>Hạng thành viên</Text>
-                  <Text style={styles.menuItemSub}>Xem lộ trình thăng hạng & đặc quyền Bạch Kim</Text>
+                  <Text style={styles.menuItemSub}>Xem lộ trình thăng hạng & đặc quyền Premium</Text>
                 </View>
                 <ChevronRightIcon />
               </TouchableOpacity>
