@@ -25,8 +25,6 @@ type AuthContextType = {
   logout: () => Promise<void>;
   refreshProfile: (forceCacheBust?: boolean) => Promise<void>;
   updateGlobalAvatarVersion: () => void;
-  needsOnboarding: boolean;
-  completeOnboarding: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -36,12 +34,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<ProfileDto | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
-
-  const completeOnboarding = async () => {
-    setNeedsOnboarding(false);
-    await SecureStore.setItemAsync('onboardingCompleted', 'true');
-  };
 
   const refreshProfile = async (forceCacheBust = false) => {
     try {
@@ -60,26 +52,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         p.avatarUrl = `${p.avatarUrl}?v=${newVersion}`;
       }
       setProfile(p);
-
-      // Check if user needs onboarding
-      const onboardingCompleted = await SecureStore.getItemAsync('onboardingCompleted');
-      if (onboardingCompleted !== 'true') {
-        try {
-          const healthPrefs = await PersonalizationService.getHealthPreferences();
-          const hasPreferences = healthPrefs.allergies?.length > 0 || healthPrefs.avoids?.length > 0 || healthPrefs.preferreds?.length > 0;
-          const hasBudget = p.spendingLimit !== null && p.spendingLimit !== undefined;
-
-          if (!hasPreferences && !hasBudget) {
-            setNeedsOnboarding(true);
-          } else {
-            // Already configured on another device
-            completeOnboarding();
-          }
-        } catch (prefsError) {
-          console.warn('Failed to fetch health preferences for onboarding check', prefsError);
-          setNeedsOnboarding(true);
-        }
-      }
     } catch (e: any) {
       console.warn('Failed to refresh profile', e);
       if (e.message && (e.message.includes('401') || e.message.includes('404'))) {
@@ -141,7 +113,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, token, isLoading, login, logout, refreshProfile, updateGlobalAvatarVersion, needsOnboarding, completeOnboarding }}>
+    <AuthContext.Provider value={{ user, profile, token, isLoading, login, logout, refreshProfile, updateGlobalAvatarVersion }}>
       {children}
     </AuthContext.Provider>
   );

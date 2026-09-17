@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { AlertCircle, ArrowRight, AtSign, Eye, EyeOff, Lock, Smile } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, {
   Easing,
@@ -92,15 +91,10 @@ export default function LoginForm() {
         roles: data.roles,
       });
 
-      const onboardingCompleted = await SecureStore.getItemAsync('onboardingCompleted');
-
       showToast('Đăng nhập thành công!', 'success');
+
       setTimeout(() => {
-        if (onboardingCompleted === 'true') {
-          router.replace('/home');
-        } else {
-          router.replace('/onboarding/diet-preferences');
-        }
+        router.replace('/home');
       }, 600);
     } catch (error: any) {
       // Hiển thị đúng message từ BE

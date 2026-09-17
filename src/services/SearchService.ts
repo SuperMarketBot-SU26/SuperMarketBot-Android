@@ -101,6 +101,11 @@ export class SearchService {
     const token = await SecureStore.getItemAsync('userToken');
     const { q, limit = 20, sortBy = 'relevance', useAi = false } = params;
 
+    if (!token) {
+      console.warn('[SearchService.searchPersonalized] No token found, falling back to searchAll');
+      return this.searchAll(params);
+    }
+
     let url = `${BASE_URL}/api/search/personalized?q=${encodeURIComponent(q)}&limit=${limit}&sortBy=${sortBy}&useAi=${useAi}`;
 
     console.log(`[SearchService.searchPersonalized] GET ${url}`);
@@ -109,9 +114,14 @@ export class SearchService {
       headers: {
         'Content-Type': 'application/json',
         'ngrok-skip-browser-warning': 'true',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
     });
+
+    if (response.status === 401) {
+      console.warn('[SearchService.searchPersonalized] Unauthorized (401) - Token expired, falling back to searchAll');
+      return this.searchAll(params);
+    }
 
     console.log(`[SearchService.searchPersonalized] HTTP Status: ${response.status}`);
     const rawText = await response.text();
