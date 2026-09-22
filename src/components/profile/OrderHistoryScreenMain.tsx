@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ToastAndroid, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown, ChevronUp, ShoppingBag, CheckCircle2, RefreshCw } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ProfileService } from '../../services/ProfileService';
 import { CartService } from '../../services/CartService';
 import { useAuth } from '../../context/AuthContext';
@@ -16,19 +16,22 @@ export default function OrderHistoryScreenMain() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const data = await ProfileService.getOrderHistory();
-        setOrders(data);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOrders();
-  }, []);
+  const fetchOrders = async () => {
+    try {
+      const data = await ProfileService.getOrderHistory();
+      setOrders(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders();
+    }, [])
+  );
 
   const toggleExpand = (id: number) => {
     setExpandedId(expandedId === id ? null : id);
