@@ -177,14 +177,16 @@ export default function SearchScreenMain() {
         } else if (isPersonal) {
           // Tìm kiếm từ khóa sản phẩm cá nhân hóa
           searchResults = await SearchService.searchPersonalized({
-            q: searchQuery as string,
+            q: (searchQuery as string) || '',
+            limit: 100,
             sortBy: activeSortBy,
             useAi: false,
           });
         } else {
           // Tìm kiếm tất cả thông thường (KHÔNG dùng AI, KHÔNG gắn tag cá nhân)
           searchResults = await SearchService.searchAll({
-            q: searchQuery as string,
+            q: (searchQuery as string) || '',
+            limit: 100,
             sortBy: activeSortBy,
             useAi: false,
           });
@@ -223,13 +225,18 @@ export default function SearchScreenMain() {
           // 2. Kiểm tra Keyword & Alias từ tên/mô tả/danh mục sản phẩm nếu DB chưa gắn healthTags đầy đủ
           const fullNameText = `${r.productName || ''} ${r.description || ''} ${r.categoryName || ''} ${r.subcategoryName || ''} ${r.productTypeName || ''}`.toLowerCase();
           
+          const isSeedlessFruit = /(không\s*hạt|ko\s*hạt|khong\s*hat)/i.test(fullNameText);
+          const isNonNutFood = /(gạo|hạt\s*gạo|hạt\s*nêm|bột\s*nêm|hạt\s*tiêu|tiêu\s*hạt|hạt\s*sen|hạt\s*dài|bắp|ngô|nước\s*mắm|nước\s*tương|thịt|cá|tôm|rau|củ|quả|trái)/i.test(fullNameText);
+          const hasRealNutWord = /(hạt\s*điều|óc\s*chó|hạnh\s*nhân|hạt\s*dẻ|macca|đậu\s*phộng|hạt\s*lạc|hạt\s*hướng\s*dương|hạt\s*dưa|hạt\s*bí|hạt\s*chia|cashew|walnut|almond|hazelnut|macadamia|peanut|pistachio)/i.test(fullNameText);
+          const skipNutAllergyCheck = (isSeedlessFruit || isNonNutFood) && !hasRealNutWord;
+
           const ALLERGY_ALIASES: Record<string, string[]> = {
             'sữa': ['sữa', 'milk', 'yogurt', 'phô mai', 'cheese', 'bơ', 'butter', 'cream', 'kem', 'lactose', 'whey'],
             'sữa tươi': ['sữa', 'sữa tươi', 'milk', 'fresh milk'],
             'đậu nành': ['đậu nành', 'soy', 'soya', 'tofu', 'đậu hũ'],
             'đậu phộng': ['đậu phộng', 'lạc', 'peanut'],
-            'hạt': ['hạt', 'nut', 'almond', 'óc chó', 'hạt dẻ', 'cashew', 'macca'],
-            'các loại hạt': ['hạt', 'nut', 'almond', 'óc chó', 'hạt dẻ', 'cashew', 'macca'],
+            'hạt': ['hạt điều', 'óc chó', 'hạnh nhân', 'hạt dẻ', 'cashew', 'macca', 'almond', 'hazelnut', 'hạt dưa', 'hạt hướng dương'],
+            'các loại hạt': ['hạt điều', 'óc chó', 'hạnh nhân', 'hạt dẻ', 'cashew', 'macca', 'almond', 'hazelnut', 'hạt dưa', 'hạt hướng dương'],
             'gluten': ['gluten', 'lúa mì', 'wheat', 'bột mì'],
             'hải sản': ['hải sản', 'tôm', 'cua', 'ốc', 'sò', 'mực', 'seafood', 'shrimp', 'crab'],
             'hải sản có vỏ': ['hải sản', 'tôm', 'cua', 'ốc', 'sò', 'seafood', 'shrimp', 'crab'],
@@ -239,7 +246,9 @@ export default function SearchScreenMain() {
           let matchedAllergy = userAllergies.find(allergy => {
             const clean = allergy.replace(/dị\s*ứng/gi, '').trim().toLowerCase();
             if (clean.length <= 1) return false;
-            if (fullNameText.includes(clean)) return true;
+            const isNutTag = clean === 'hạt' || clean === 'các loại hạt' || clean.includes('hạt');
+            if (isNutTag && skipNutAllergyCheck) return false;
+            if (!isNutTag && fullNameText.includes(clean)) return true;
             const aliases = ALLERGY_ALIASES[clean] || [];
             return aliases.some(alias => fullNameText.includes(alias));
           });
@@ -247,7 +256,9 @@ export default function SearchScreenMain() {
             matchedAllergy = userAvoids.find(avoid => {
               const clean = avoid.replace(/tránh/gi, '').trim().toLowerCase();
               if (clean.length <= 1) return false;
-              if (fullNameText.includes(clean)) return true;
+              const isNutTag = clean === 'hạt' || clean === 'các loại hạt' || clean.includes('hạt');
+              if (isNutTag && skipNutAllergyCheck) return false;
+              if (!isNutTag && fullNameText.includes(clean)) return true;
               const aliases = ALLERGY_ALIASES[clean] || [];
               return aliases.some(alias => fullNameText.includes(alias));
             });
@@ -264,7 +275,8 @@ export default function SearchScreenMain() {
           const isDietConflict = isVeganUser && isMeatOrFish;
 
           const isRestricted = r.isRestricted || isAllergyConflict || isDietConflict;
-          const isOverBudget = userSpendingLimit > 0 && (r.promotionPrice ?? r.unitPrice ?? 0) > userSpendingLimit;
+          const itemPrice = r.promotionPrice ?? r.unitPrice ?? 0;
+          const isOverBudget = userSpendingLimit > 0 && itemPrice > userSpendingLimit;
 
           let restrictionLabel = r.restrictionLabel;
           if (!restrictionLabel || restrictionLabel === '⚠️ VI PHẠM CHẾ ĐỘ ĂN') {
@@ -291,7 +303,7 @@ export default function SearchScreenMain() {
             ...r,
             isRestricted,
             restrictionLabel,
-            isOverBudget: r.isOverBudget || isOverBudget,
+            isOverBudget,
             altName,
           };
         });
@@ -384,7 +396,7 @@ export default function SearchScreenMain() {
           <Text style={styles.headerSubtitle}>
             {mode === 'personal' ? 'TÌM KIẾM CÁ NHÂN HÓA' : 'TÌM KIẾM TẤT CẢ'}
           </Text>
-          <Text style={styles.headerTitle}>{searchQuery}</Text>
+          <Text style={styles.headerTitle}>{searchQuery ? searchQuery : 'Tất cả sản phẩm'}</Text>
         </View>
         <TouchableOpacity style={styles.cartButton} onPress={() => router.push('/cart')}>
           <ShoppingBag color="#059669" size={20} />

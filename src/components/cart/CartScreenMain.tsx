@@ -17,6 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import { CartDto, CartItemDto, CartService } from '../../services/CartService';
 import { NavigationService } from '../../services/NavigationService';
@@ -193,6 +194,8 @@ export default function CartScreenMain() {
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
   const { hubConnection } = useNotification();
+  const auth = useAuth();
+  const refreshProfile = auth?.refreshProfile || (async () => {});
 
   const formatPrice = (price: number) => {
     return price ? price.toLocaleString('vi-VN') + ' đ' : '0 đ';
@@ -357,6 +360,7 @@ export default function CartScreenMain() {
         console.log('📡 Gửi API Cart.checkout với startNodeId:', effectiveStartNodeId);
         checkoutResult = await CartService.checkout(effectiveStartNodeId);
         console.log('📥 Kết quả Cart.checkout từ BE:', JSON.stringify(checkoutResult, null, 2));
+        refreshProfile(true).catch(() => {});
       } catch (err) {
         console.warn('Cart checkout BE API error:', err);
       }

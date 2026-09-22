@@ -155,13 +155,13 @@ export default function MapScreenWebViewMain() {
 
   const AISLE_WAYPOINTS_MAP: Record<string, { x: number; y: number }> = {
     '1': { x: 5.6, y: 3.0 },
-    '2': { x: 6.8, y: 3.0 },
-    '3': { x: 6.8, y: 6.4 },
-    '4': { x: 5.6, y: 6.8 },
-    '5': { x: 2.0, y: 6.8 },
+    '2': { x: 7.2, y: 3.0 },
+    '3': { x: 7.2, y: 6.3 },
+    '4': { x: 5.6, y: 6.7 },
+    '5': { x: 3.8, y: 6.7 },
     '6': { x: 3.8, y: 4.7 },
-    '7': { x: 2.0, y: 3.0 },
-    '8': { x: 0.5, y: 3.0 },
+    '7': { x: 3.8, y: 3.0 },
+    '8': { x: 3.8, y: 3.0 },
   };
 
   const getAislePoint = (item: any): { x: number; y: number } => {
@@ -177,7 +177,7 @@ export default function MapScreenWebViewMain() {
     }
     const x = Number(item?.xCoord ?? item?.x ?? item?.X ?? 0);
     const y = Number(item?.yCoord ?? item?.y ?? item?.Y ?? 0);
-    return { x: x > 4.0 ? 6.8 : 2.0, y: y > 1.5 ? 6.8 : 3.0 };
+    return { x: x > 4.0 ? 7.2 : 3.8, y: y > 1.5 ? 6.7 : 3.0 };
   };
 
   // Lọc chỉ lấy các điểm dừng quan trọng (Xuất phát, Kệ chứa sản phẩm, Quầy Thu Ngân kết thúc)

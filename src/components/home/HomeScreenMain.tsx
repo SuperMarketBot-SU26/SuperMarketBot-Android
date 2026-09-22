@@ -1,16 +1,15 @@
 import Voice from '@react-native-voice/voice';
-import { Audio } from 'expo-av';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { AlertTriangle, Bell, Bot, CheckCircle2, Home, Lock, Map, Mic, Plus, Search, ShoppingBag, ShoppingCart, Sparkles, User, X, Zap } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, NativeModules, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, FlatList, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
-import ProductCard from './ProductCard';
+import { AlertTriangle, Bot, CheckCircle2, Home, Lock, Map, Mic, Plus, Search, ShoppingBag, ShoppingCart, Sparkles, User, X, Zap } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Modal, NativeModules, PermissionsAndroid, Platform, Animated as RNAnimated, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
+import { WebView } from 'react-native-webview';
 import { useAuth } from '../../context/AuthContext';
 import { CartService } from '../../services/CartService';
 import { MealSuggestionService, MenuAssistantResponseDto } from '../../services/MealSuggestionService';
@@ -20,6 +19,90 @@ import { ProductDto, ProductService } from '../../services/ProductService';
 import { RobotService } from '../../services/RobotService';
 import { SearchService } from '../../services/SearchService';
 import { fixMojibake } from '../../utils/textUtils';
+import ProductCard from './ProductCard';
+
+const AUDIO_RECORDER_HTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="background:transparent;margin:0;padding:0;">
+  <script>
+    var recognition = null;
+    var started = false;
+
+    function postMsg(obj) {
+      try { window.ReactNativeWebView.postMessage(JSON.stringify(obj)); } catch(e){}
+    }
+
+    function startRecording() {
+      if (started) return;
+      started = true;
+
+      var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        postMsg({ type: 'ERROR', message: 'Web Speech API khong duoc ho tro trong trinh duyet nay. Vui long go ban phim de tim kiem.' });
+        started = false;
+        return;
+      }
+
+      try {
+        if (recognition) { try { recognition.abort(); } catch(e){} }
+        recognition = new SpeechRecognition();
+        recognition.lang = 'vi-VN';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = function() {
+          postMsg({ type: 'STARTED' });
+        };
+
+        recognition.onresult = function(event) {
+          var interim = '';
+          var final = '';
+          for (var i = event.resultIndex; i < event.results.length; i++) {
+            var t = event.results[i][0].transcript;
+            if (event.results[i].isFinal) { final += t; }
+            else { interim += t; }
+          }
+          if (final) { postMsg({ type: 'FINAL_TEXT', text: final }); }
+          else if (interim) { postMsg({ type: 'PARTIAL_TEXT', text: interim }); }
+        };
+
+        recognition.onerror = function(event) {
+          postMsg({ type: 'ERROR', message: 'Speech error: ' + event.error });
+          started = false;
+        };
+
+        recognition.onend = function() {
+          postMsg({ type: 'SPEECH_END' });
+          started = false;
+        };
+
+        recognition.start();
+      } catch(e) {
+        postMsg({ type: 'ERROR', message: 'Khoi dong that bai: ' + (e.message || String(e)) });
+        started = false;
+      }
+    }
+
+    function stopRecording() {
+      started = false;
+      if (recognition) {
+        try { recognition.stop(); } catch(e){}
+        recognition = null;
+      }
+    }
+  </script>
+</body>
+</html>
+`;
+
+
+
 const cleanSearchQuery = (query: string): string => {
   if (!query) return '';
   let cleaned = query.trim();
@@ -103,6 +186,7 @@ export default function HomeScreenMain() {
   const [searchMode, setSearchMode] = useState<'personal' | 'all'>('personal');
   const [activeTab, setActiveTab] = useState('home');
   const [products, setProducts] = useState<ProductDto[]>([]);
+  const [visibleProductCount, setVisibleProductCount] = useState<number>(6);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [meals, setMeals] = useState<RecipeDto[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(true);
@@ -208,7 +292,7 @@ export default function HomeScreenMain() {
       isMounted.current = false;
       if (isVoiceAvailable()) {
         try {
-          Voice.destroy().then(() => Voice.removeAllListeners()).catch(() => {});
+          Voice.destroy().then(() => Voice.removeAllListeners()).catch(() => { });
         } catch (err) { }
       }
     };
@@ -227,93 +311,262 @@ export default function HomeScreenMain() {
     }
   }, [isListening]);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef = useRef<any>(null);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
 
-  const startListening = async () => {
+  const webViewRef = useRef<any>(null);
+  const audioAvTested = useRef<boolean>(false);
+  const webViewReadyToRecord = useRef<boolean>(false);
+
+  const handleWebViewAudioMessage = async (event: any) => {
     try {
-      setVoiceText('');
-      setIsListening(true);
+      const data = JSON.parse(event.nativeEvent.data);
+      console.log('[VoiceSearch] WebView Message Received:', data.type, data.text || data.message || '');
 
-      if (isVoiceAvailable()) {
-        try {
-          await Voice.cancel();
-          await Voice.destroy();
-        } catch (err) { }
-        await Voice.start('vi-VN');
-        return;
-      }
-
-      // Fallback to real expo-av Audio recording for Expo Go
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        ToastAndroid.show('Quyền micro bị từ chối', ToastAndroid.SHORT);
-        setIsListening(false);
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recordingRef.current = recording;
-      setIsRecordingAudio(true);
-      setVoiceText('Đang thu âm giọng nói của bạn...');
-    } catch (e) {
-      console.error('Audio recording start error:', e);
-      ToastAndroid.show('Không thể khởi chạy micro ghi âm', ToastAndroid.SHORT);
-      setIsListening(false);
-    }
-  };
-
-  const stopListening = async () => {
-    try {
-      if (isVoiceAvailable()) {
-        setIsListening(false);
-        await Voice.stop().catch(() => {});
-        await Voice.destroy().catch(() => {});
-        if (voiceText) {
-          const cleaned = cleanSearchQuery(voiceText);
-          router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+      if (data.type === 'STARTED') {
+        console.log('[VoiceSearch] Mic STARTED listening');
+        if (isMounted.current) {
+          setIsListening(true);
+          setVoiceText('Đang lắng nghe giọng nói của bạn...');
         }
-        return;
-      }
-
-      if (!recordingRef.current) {
-        setIsListening(false);
-        setIsRecordingAudio(false);
-        return;
-      }
-
-      setIsTranscribing(true);
-      setVoiceText('⚡ AI đang chuyển lời nói thành chữ...');
-
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
-      setIsRecordingAudio(false);
-
-      if (uri) {
-        const text = await SearchService.transcribeSpeech(uri);
-        if (text && isMounted.current) {
-          setVoiceText(text);
+      } else if (data.type === 'PARTIAL_TEXT') {
+        console.log('[VoiceSearch] PARTIAL_TEXT:', data.text);
+        if (data.text && isMounted.current) {
+          setVoiceText(data.text);
+        }
+      } else if (data.type === 'FINAL_TEXT') {
+        console.log('[VoiceSearch] FINAL_TEXT:', data.text);
+        if (data.text && isMounted.current) {
+          setVoiceText(data.text);
+          setIsTranscribing(true);
           setTimeout(() => {
             if (isMounted.current) {
               setIsListening(false);
               setIsTranscribing(false);
-              const cleaned = cleanSearchQuery(text);
+              const cleaned = cleanSearchQuery(data.text);
+              console.log('[VoiceSearch] Navigating to search query:', cleaned);
               if (cleaned) {
                 router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
               }
             }
-          }, 800);
-        } else {
-          setVoiceText('Chưa nghe rõ lời nói, vui lòng thử lại.');
+          }, 600);
+        }
+      } else if (data.type === 'SPEECH_END') {
+        console.log('[VoiceSearch] SPEECH_END received');
+        if (isMounted.current && voiceText && voiceText !== 'Đang lắng nghe giọng nói của bạn...' && !isTranscribing) {
+          setIsListening(false);
+          const cleaned = cleanSearchQuery(voiceText);
+          console.log('[VoiceSearch] SPEECH_END query:', cleaned);
+          if (cleaned) {
+            router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+          }
+        }
+      } else if (data.type === 'AUTO_STOP') {
+        console.log('[VoiceSearch] AUTO_STOP triggered');
+        if (isMounted.current) {
+          setIsTranscribing(true);
+          setVoiceText('⚡ Đã nhận dạng xong lời nói! AI đang chuyển thành chữ...');
+        }
+      } else if (data.type === 'AUDIO_BASE64') {
+        console.log('[VoiceSearch] AUDIO_BASE64 received, length:', data.data ? data.data.length : 0);
+        if (data.data && isMounted.current) {
+          setIsTranscribing(true);
+          setVoiceText('⚡ AI đang chuyển lời nói thành chữ...');
+          const transcribedText = await SearchService.transcribeAudioBase64(data.data);
+          console.log('[VoiceSearch] STT Result:', transcribedText);
+          if (transcribedText && isMounted.current) {
+            setVoiceText(transcribedText);
+            setTimeout(() => {
+              if (isMounted.current) {
+                setIsListening(false);
+                setIsTranscribing(false);
+                const cleaned = cleanSearchQuery(transcribedText);
+                if (cleaned) {
+                  router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+                }
+              }
+            }, 800);
+          } else {
+            setVoiceText('Chưa nghe rõ lời nói, vui lòng thử lại.');
+            setTimeout(() => {
+              if (isMounted.current) {
+                setIsListening(false);
+                setIsTranscribing(false);
+              }
+            }, 1500);
+          }
+        }
+      } else if (data.type === 'ERROR') {
+        console.warn('[VoiceSearch] WebView ERROR:', data.message);
+        if (isMounted.current) {
+          setIsListening(false);
+          setIsTranscribing(false);
+          const msg: string = data.message || '';
+          if (msg.includes('khong duoc ho tro') || msg.includes('not-allowed') || msg.includes('service-not-allowed') || msg.includes('network')) {
+            Alert.alert(
+              '⚠️ Tìm kiếm giọng nói không khả dụng',
+              'Thiết bị hoặc Expo Go không hỗ trợ nhận dạng giọng nói.\n\nVui lòng dùng bàn phím để tìm kiếm.',
+              [{ text: 'Đã hiểu', style: 'default' }]
+            );
+          } else {
+            ToastAndroid.show('Lỗi micro: ' + msg.substring(0, 80), ToastAndroid.LONG);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[VoiceSearch] Message parse error:', err);
+    }
+  };
+
+  const cancelListening = async () => {
+    console.log('[VoiceSearch] ❌ cancelListening triggered!');
+    try {
+      if (recordingRef.current) {
+        await recordingRef.current.stopAndUnloadAsync().catch(() => { });
+        recordingRef.current = null;
+      }
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript('stopRecording(); true;');
+      }
+    } catch (e) { }
+    if (isMounted.current) {
+      setIsListening(false);
+      setIsTranscribing(false);
+      setIsRecordingAudio(false);
+      setVoiceText('');
+    }
+  };
+
+  const startListening = async () => {
+    console.log('[VoiceSearch] 🎙️ startListening pressed');
+    ToastAndroid.show('🎙️ Bắt đầu lắng nghe...', ToastAndroid.SHORT);
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Quyền truy cập Micro',
+            message: 'SmartMarketBot cần Micro để bạn tìm kiếm bằng giọng nói.',
+            buttonNeutral: 'Hỏi lại sau',
+            buttonNegative: 'Hủy',
+            buttonPositive: 'Đồng ý',
+          }
+        );
+        console.log('[VoiceSearch] RECORD_AUDIO permission result:', granted);
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Cần quyền Micro', 'Vui lòng cho phép ứng dụng truy cập Micro trong Cài đặt → Quyền ứng dụng.');
+          return;
+        }
+      }
+
+      // 1. Native @react-native-voice/voice (Expo Dev Client only)
+      if (isVoiceAvailable()) {
+        console.log('[VoiceSearch] Using @react-native-voice/voice');
+        setVoiceText('');
+        setIsListening(true);
+        setIsTranscribing(false);
+        try { await Voice.cancel(); await Voice.destroy(); } catch (_) { }
+        await Voice.start('vi-VN');
+        return;
+      }
+
+      // 2. Fallback: WebView HTML5 getUserMedia (works in Expo Go)
+      // Just open the modal - WebView inside will auto-start recording via onLoad
+      console.log('[VoiceSearch] Using WebView fallback - opening modal, WebView will auto-start');
+      webViewReadyToRecord.current = false;
+      setVoiceText('');
+      setIsListening(true);
+      setIsTranscribing(false);
+      // WebView onLoad → startRecording() is called automatically
+    } catch (e: any) {
+      console.error('[VoiceSearch] startListening error:', e);
+      setIsListening(false);
+      ToastAndroid.show('Lỗi micro: ' + (e.message || String(e)), ToastAndroid.SHORT);
+    }
+  };
+
+  const stopListening = async () => {
+    console.log('[VoiceSearch] ⏹️ stopListening button pressed!');
+    try {
+      if (isVoiceAvailable()) {
+        setIsListening(false);
+        await Voice.stop().catch(() => { });
+        await Voice.destroy().catch(() => { });
+        if (voiceText) {
+          const cleaned = cleanSearchQuery(voiceText);
+          if (cleaned) {
+            router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+          }
+        }
+        return;
+      }
+
+      if (recordingRef.current) {
+        setIsTranscribing(true);
+        setVoiceText('⚡ AI đang dịch giọng nói thành chữ...');
+        ToastAndroid.show('⚡ AI đang phân tích lời nói...', ToastAndroid.SHORT);
+
+        const currentRec = recordingRef.current;
+        recordingRef.current = null;
+        setIsRecordingAudio(false);
+
+        try {
+          console.log('[VoiceSearch] Stopping audio recording...');
+          await currentRec.stopAndUnloadAsync();
+          const uri = currentRec.getURI();
+          console.log('[VoiceSearch] Recorded file URI:', uri);
+
+          if (uri) {
+            let transcribedText = '';
+
+            try {
+              const res = await fetch(uri);
+              const blob = await res.blob();
+              const base64Audio = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = () => resolve('');
+                reader.readAsDataURL(blob);
+              });
+
+              if (base64Audio) {
+                console.log('[VoiceSearch] Sending Base64 audio length:', base64Audio.length);
+                transcribedText = await SearchService.transcribeAudioBase64(base64Audio);
+              }
+            } catch (blobErr) {
+              console.warn('[VoiceSearch] Base64 fetch error, fallback to FormData:', blobErr);
+            }
+
+            if (!transcribedText) {
+              transcribedText = await SearchService.transcribeSpeech(uri);
+            }
+
+            console.log('[VoiceSearch] Transcribe STT result:', transcribedText);
+
+            if (transcribedText && isMounted.current) {
+              setVoiceText(transcribedText);
+              ToastAndroid.show(`AI nhận diện: "${transcribedText}"`, ToastAndroid.LONG);
+              const cleaned = cleanSearchQuery(transcribedText);
+              setTimeout(() => {
+                if (isMounted.current) {
+                  setIsListening(false);
+                  setIsTranscribing(false);
+                  if (cleaned) {
+                    router.push({ pathname: '/search', params: { query: cleaned, mode: searchMode } });
+                  }
+                }
+              }, 800);
+              return;
+            }
+          }
+        } catch (recErr) {
+          console.error('[VoiceSearch] Error stopping/transcribing audio:', recErr);
+        }
+
+        if (isMounted.current) {
+          setVoiceText('⚠️ Chưa nghe rõ lời nói. Vui lòng thử lại.');
+          ToastAndroid.show('⚠️ Chưa nghe rõ lời nói. Vui lòng bấm thử lại.', ToastAndroid.SHORT);
           setTimeout(() => {
             if (isMounted.current) {
               setIsListening(false);
@@ -321,12 +574,17 @@ export default function HomeScreenMain() {
             }
           }, 1500);
         }
-      } else {
-        setIsListening(false);
-        setIsTranscribing(false);
+        return;
       }
-    } catch (e) {
-      console.error('Audio recording stop error:', e);
+
+      console.log('[VoiceSearch] No active recordingRef found, closing modal');
+      setIsListening(false);
+      setIsTranscribing(false);
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript('stopRecording(); true;');
+      }
+    } catch (e: any) {
+      console.error('[VoiceSearch] stopListening error:', e);
       setIsListening(false);
       setIsTranscribing(false);
     }
@@ -353,7 +611,10 @@ export default function HomeScreenMain() {
             ...ing,
             quantityRequired: (ing.quantityRequired / basePortions) * portionsCount
           }));
-          data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
+          data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => {
+            const packs = (ing.quantityRequired > 10) ? 1 : Math.max(1, Math.ceil(ing.quantityRequired || 1));
+            return sum + (ing.unitPrice * packs);
+          }, 0);
         } else {
           // Fallback gọi AI (chỉ khi thực sự chưa có nguyên liệu)
           const rName = fallbackRecipeName || recipeToUse?.recipeName;
@@ -368,7 +629,7 @@ export default function HomeScreenMain() {
               ];
               const allergies = allergiesList.map((p: any) => p.tagName);
               if (diets.length > 0 || allergies.length > 0) {
-                aiQuery += ` (HƯỚNG DẪN: Bước 1: Giữ thành phần thịt/cá nếu món gốc là món mặn (không tự đổi sang đồ chay trừ khi có yêu cầu ăn chay). Nếu có yêu cầu rẻ/tiết kiệm/dưới X tiền, ĐƯỢC PHÉP đổi sang loại thịt/cá rẻ hơn để đảm bảo ngân sách. Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU vi phạm, set "isRestricted": true và điền sản phẩm chay/an toàn vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.)`;
+                aiQuery += ` (HƯỚNG DẪN: Bước 1: Giữ thành phần thịt/cá nếu món gốc là món mặn (không tự đổi sang đồ chay trừ khi có yêu cầu ăn chay). Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU vi phạm, set "isRestricted": true và điền sản phẩm chay/an toàn vào "altName". LƯU Ý BẮT BUỘC: Không được đánh dấu dị ứng hạt đối với các sản phẩm như Chanh không hạt, Gạo hạt dài, Hạt nêm, Hạt tiêu, Hạt sen.)`;
               }
             } catch (e) {
               console.warn('Lỗi lấy prefs:', e);
@@ -380,6 +641,24 @@ export default function HomeScreenMain() {
                 let isRestricted = ing.isRestricted === true;
                 let altName = ing.altName || null;
                 let desc = ing.reason || ing.quantityText;
+
+                const pNameLower = (ing.productName || '').toLowerCase();
+                if (pNameLower.includes('nước mắm')) {
+                  isRestricted = true;
+                  if (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế') {
+                    altName = 'Nước Tương Chin-su Tỏi Ớt 330ml';
+                  }
+                } else if (pNameLower.includes('trứng gà ta')) {
+                  isRestricted = true;
+                  if (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế') {
+                    altName = 'Trứng gà công nghiệp 10 quả';
+                  }
+                } else if (/(^|\s)(thịt|sườn|gà|bò|heo|cá|tôm|mực|chả)(\s|$|[.,])/i.test(pNameLower)) {
+                  isRestricted = true;
+                  if (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế') {
+                    altName = 'Đậu Hũ Non Hộp 220g';
+                  }
+                }
 
                 return {
                   productId: ing.productId,
@@ -395,7 +674,10 @@ export default function HomeScreenMain() {
                   description: desc
                 };
               });
-              data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => sum + (ing.unitPrice * ing.quantityRequired), 0);
+              data.estimatedTotalCost = data.ingredients.reduce((sum: number, ing: any) => {
+                const packs = (ing.quantityRequired > 10) ? 1 : Math.max(1, Math.ceil(ing.quantityRequired || 1));
+                return sum + (ing.unitPrice * packs);
+              }, 0);
             }
           }
         }
@@ -544,11 +826,13 @@ export default function HomeScreenMain() {
         data = await ProductService.getProducts();
       }
       setProducts(data as any);
+      setVisibleProductCount(6);
     } catch (error) {
       console.error('Error fetching products:', error);
       if (searchMode === 'personal') {
         const fallbackData = await ProductService.getProducts();
         setProducts(fallbackData);
+        setVisibleProductCount(6);
       }
     } finally {
       setLoadingProducts(false);
@@ -582,7 +866,7 @@ export default function HomeScreenMain() {
                 ];
                 const allergies = allergiesList.map((p: any) => p.tagName);
                 if (diets.length > 0 || allergies.length > 0) {
-                  aiQuery += ` (HƯỚNG DẪN: Bước 1: Giữ thành phần thịt/cá nếu món gốc là món mặn (không tự đổi sang đồ chay trừ khi có yêu cầu ăn chay). Nếu có yêu cầu rẻ/tiết kiệm/dưới X tiền, ĐƯỢC PHÉP đổi sang loại thịt/cá rẻ hơn để đảm bảo ngân sách. Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU vi phạm, set "isRestricted": true và điền sản phẩm chay/an toàn vào "altName". Nếu an toàn thì set "isRestricted": false và "altName": null.)`;
+                  aiQuery += ` (HƯỚNG DẪN: Bước 1: Giữ thành phần thịt/cá nếu món gốc là món mặn (không tự đổi sang đồ chay trừ khi có yêu cầu ăn chay). Bước 2: Kiểm tra danh sách với Chế độ ăn: [${diets.join(', ')}] / Dị ứng: [${allergies.join(', ')}]. NẾU vi phạm, set "isRestricted": true và điền sản phẩm chay/an toàn vào "altName". LƯU Ý BẮT BUỘC: Không được đánh dấu dị ứng hạt đối với các sản phẩm như Chanh không hạt, Gạo hạt dài, Hạt nêm, Hạt tiêu, Hạt sen.)`;
                 }
               } catch (e) {
                 console.warn('Lỗi lấy prefs:', e);
@@ -594,6 +878,24 @@ export default function HomeScreenMain() {
                   let isRestricted = ing.isRestricted === true;
                   let altName = ing.altName || null;
                   let desc = ing.reason || ing.quantityText;
+
+                  const pNameLower = (ing.productName || '').toLowerCase();
+                  if (pNameLower.includes('nước mắm')) {
+                    isRestricted = true;
+                    if (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế') {
+                      altName = 'Nước Tương Chin-su Tỏi Ớt 330ml';
+                    }
+                  } else if (pNameLower.includes('trứng gà ta')) {
+                    isRestricted = true;
+                    if (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế') {
+                      altName = 'Trứng gà công nghiệp 10 quả';
+                    }
+                  } else if (/(^|\s)(thịt|sườn|gà|bò|heo|cá|tôm|mực|chả)(\s|$|[.,])/i.test(pNameLower)) {
+                    isRestricted = true;
+                    if (!altName || altName === 'null' || altName === 'Không có sản phẩm thay thế') {
+                      altName = 'Đậu Hũ Non Hộp 220g';
+                    }
+                  }
 
                   return {
                     productId: ing.productId,
@@ -666,7 +968,7 @@ export default function HomeScreenMain() {
       <FlatList
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        data={products}
+        data={products.slice(0, visibleProductCount)}
         keyExtractor={(item) => item.productId.toString()}
         numColumns={2}
         columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 20 }}
@@ -679,358 +981,376 @@ export default function HomeScreenMain() {
         }
         renderItem={({ item: product }) => <ProductCard product={product} userTier={userTier} spendingLimit={spendingLimit} hideBudgetWarning={true} />}
         ListFooterComponent={
-          <TouchableOpacity style={[styles.viewMoreCard, { marginHorizontal: 20 }]} activeOpacity={0.8} onPress={() => router.push({ pathname: '/search', params: { mode: 'personal' } })}>
+          <TouchableOpacity
+            style={[styles.viewMoreCard, { marginHorizontal: 20 }]}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (visibleProductCount < products.length) {
+                setVisibleProductCount(prev => Math.min(prev + 6, products.length));
+              } else {
+                router.push({ pathname: '/search', params: { query: '', mode: searchMode } });
+              }
+            }}
+          >
             <View style={styles.viewMoreIconBox}>
               <Plus color="#059669" size={24} />
             </View>
-            <Text style={styles.viewMoreTitle}>Xem thêm sản phẩm</Text>
-            <Text style={styles.viewMoreSubtitle}>Dựa trên thói quen mua sắm</Text>
+            <Text style={styles.viewMoreTitle}>
+              {visibleProductCount < products.length ? 'Xem thêm sản phẩm' : 'Xem tất cả sản phẩm'}
+            </Text>
+            <Text style={styles.viewMoreSubtitle}>
+              {visibleProductCount < products.length
+                ? `Đã hiện ${visibleProductCount}/${products.length} • Bấm để tải thêm`
+                : 'Bấm để mở toàn bộ sản phẩm'}
+            </Text>
           </TouchableOpacity>
         }
         ListHeaderComponent={<>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={[styles.userInfo, { flex: 1, paddingRight: 12 }]} onPress={() => router.push('/profile')}>
-            <View style={styles.avatarContainer}>
-              <Image source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }} style={styles.avatar} />
-              <View style={[styles.badge, { backgroundColor: tierTheme.badgeBg }]}>
-                <Text style={styles.badgeText}>{tierTheme.badgeText}</Text>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity style={[styles.userInfo, { flex: 1, paddingRight: 12 }]} onPress={() => router.push('/profile')}>
+              <View style={styles.avatarContainer}>
+                <Image source={{ uri: profile?.avatarUrl || profile?.facePath || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png' }} style={styles.avatar} />
+                <View style={[styles.badge, { backgroundColor: tierTheme.badgeBg }]}>
+                  <Text style={styles.badgeText}>{tierTheme.badgeText}</Text>
+                </View>
               </View>
+              <View style={[styles.greetingContainer, { flex: 1 }]}>
+                <Text style={styles.greetingText} numberOfLines={1}>Chào {profile?.fullName ? profile.fullName.split(' ').pop() : 'bạn'}!</Text>
+                <Text style={styles.subGreetingText} numberOfLines={1}>{getGreetingText()}</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/profile')}>
+                <User color="#4B5563" size={22} />
+              </TouchableOpacity>
             </View>
-            <View style={[styles.greetingContainer, { flex: 1 }]}>
-              <Text style={styles.greetingText} numberOfLines={1}>Chào {profile?.fullName ? profile.fullName.split(' ').pop() : 'bạn'}!</Text>
-              <Text style={styles.subGreetingText} numberOfLines={1}>{getGreetingText()}</Text>
+          </View>
+
+
+
+          {/* Search Section */}
+          <Animated.View entering={FadeInDown.delay(300)} style={styles.searchSection}>
+            <View style={styles.searchToggle}>
+              <TouchableOpacity
+                style={[styles.toggleBtn, searchMode === 'personal' && styles.toggleBtnActive]}
+                onPress={() => {
+                  if (userTier === 'PREMIUM') {
+                    setSearchMode('personal');
+                  } else {
+                    Alert.alert(
+                      "Tính năng khóa",
+                      "Tìm kiếm cá nhân hóa chỉ dành cho thành viên Premium trở lên. Vui lòng nâng cấp tài khoản để sử dụng."
+                    );
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                {searchMode === 'personal' ? (
+                  <CheckCircle2 color="white" size={16} style={{ marginRight: 6 }} />
+                ) : (userTier !== 'PREMIUM') ? (
+                  <Lock color="#9CA3AF" size={14} style={{ marginRight: 4 }} />
+                ) : null}
+                <Text style={[styles.toggleBtnText, searchMode === 'personal' && styles.toggleBtnTextActive]}>Tìm cá nhân hóa</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleBtn, searchMode === 'all' && styles.toggleBtnActive]}
+                onPress={() => setSearchMode('all')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.toggleBtnText, searchMode === 'all' && styles.toggleBtnTextActive]}>Tìm tất cả</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-          <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/profile')}>
-              <User color="#4B5563" size={22} />
-            </TouchableOpacity>
-          </View>
-        </View>
 
+            <View style={styles.searchInputContainer}>
+              <Search color="#9CA3AF" size={20} style={styles.searchIcon} />
+              <TextInput
+                placeholder="Bạn đang tìm gì?"
+                style={styles.searchInput}
+                placeholderTextColor="#9CA3AF"
+                onSubmitEditing={(e) => {
+                  const query = e.nativeEvent.text;
+                  if (query.trim().length > 0) {
+                    router.push({ pathname: '/search', params: { query, mode: searchMode } });
+                  }
+                }}
+              />
+              <TouchableOpacity style={styles.actionIcon} onPress={startListening}>
+                <Mic color="#059669" size={20} />
+              </TouchableOpacity>
 
-
-        {/* Search Section */}
-        <Animated.View entering={FadeInDown.delay(300)} style={styles.searchSection}>
-          <View style={styles.searchToggle}>
-            <TouchableOpacity
-              style={[styles.toggleBtn, searchMode === 'personal' && styles.toggleBtnActive]}
-              onPress={() => {
-                if (userTier === 'PREMIUM') {
-                  setSearchMode('personal');
-                } else {
-                  Alert.alert(
-                    "Tính năng khóa",
-                    "Tìm kiếm cá nhân hóa chỉ dành cho thành viên Premium trở lên. Vui lòng nâng cấp tài khoản để sử dụng."
-                  );
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              {searchMode === 'personal' ? (
-                <CheckCircle2 color="white" size={16} style={{ marginRight: 6 }} />
-              ) : (userTier !== 'PREMIUM') ? (
-                <Lock color="#9CA3AF" size={14} style={{ marginRight: 4 }} />
-              ) : null}
-              <Text style={[styles.toggleBtnText, searchMode === 'personal' && styles.toggleBtnTextActive]}>Tìm cá nhân hóa</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleBtn, searchMode === 'all' && styles.toggleBtnActive]}
-              onPress={() => setSearchMode('all')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.toggleBtnText, searchMode === 'all' && styles.toggleBtnTextActive]}>Tìm tất cả</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.searchInputContainer}>
-            <Search color="#9CA3AF" size={20} style={styles.searchIcon} />
-            <TextInput
-              placeholder="Bạn đang tìm gì?"
-              style={styles.searchInput}
-              placeholderTextColor="#9CA3AF"
-              onSubmitEditing={(e) => {
-                const query = e.nativeEvent.text;
-                if (query.trim().length > 0) {
-                  router.push({ pathname: '/search', params: { query, mode: searchMode } });
-                }
-              }}
-            />
-            <TouchableOpacity style={styles.actionIcon} onPress={startListening}>
-              <Mic color="#059669" size={20} />
-            </TouchableOpacity>
-
-          </View>
-        </Animated.View>
-
-        {/* Personalization Notification Banner */}
-        {searchMode === 'personal' && (
-          <Animated.View entering={FadeInDown.delay(350)} style={{ backgroundColor: '#ECFDF5', padding: 12, marginHorizontal: 20, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-            <Sparkles color="#059669" size={18} style={{ marginRight: 8 }} />
-            <Text style={{ color: '#065F46', fontSize: 12, flex: 1, fontWeight: '500' }}>
-              ✨ AI đã tự động loại bỏ các nguyên liệu bạn dị ứng và gợi ý theo đúng ngân sách, chế độ ăn của bạn!
-            </Text>
+            </View>
           </Animated.View>
-        )}
 
-        {/* Smart Utilities */}
-        <Animated.View entering={FadeInRight.delay(400)}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Tiện ích thông minh</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-            {/* Personalized Meals */}
-            {userTier !== 'PREMIUM' ? (
-              <View style={[styles.smartCard, { width: width * 0.85, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }]}>
-                <Sparkles color="#9CA3AF" size={32} style={{ marginBottom: 12 }} />
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#4B5563', marginBottom: 8 }}>Tính năng khóa</Text>
-                <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
-                  Tiện ích cá nhân hóa đề xuất món ăn và nguyên liệu bằng AI chỉ dành cho thành viên Premium (chi tiêu trên 10,000,000đ).
-                </Text>
-              </View>
-            ) : loadingMeals ? (
-              <View style={[styles.smartCard, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="small" color="#059669" />
-              </View>
-            ) : meals.length > 0 ? (
-              meals.map((meal) => (
-                <View key={meal.recipeId} style={styles.smartCard}>
-                  <View style={styles.smartCardImageWrapper}>
-                    <Image source={{ uri: meal.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop' }} style={styles.smartCardImage} />
-                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)']} style={styles.smartCardOverlay}>
-                      <View style={styles.smartBadge}>
-                        <Zap color="white" size={10} style={{ marginRight: 4 }} />
-                        <Text style={styles.smartBadgeText} numberOfLines={1}>
-                          Khớp {meal.matchScore}%
-                        </Text>
-                      </View>
-                      <Text style={styles.smartCardTitle} numberOfLines={1}>{fixMojibake(meal.recipeName)}</Text>
-                    </LinearGradient>
-                  </View>
-                  <View style={styles.smartCardFooter}>
-                    <Text style={styles.smartCardDesc} numberOfLines={1}>
-                      {fixMojibake(meal.matchReasons?.[0]) || `K.Phần: ${meal.yieldPortions} người • ${meal.calories ? meal.calories + ' kcal' : 'Ngon miệng'}`}
-                    </Text>
-                    {meal.ingredients && meal.ingredients.length > 0 && (
-                      <View style={{ marginBottom: 12 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 }}>Nguyên liệu cần có:</Text>
-                        <Text style={{ fontSize: 11, color: '#6B7280' }} numberOfLines={2}>
-                          {meal.ingredients.map((ing: any, idx: number) => (
-                            <Text key={idx} style={{ color: ing.isRestricted ? '#DC2626' : '#6B7280' }}>
-                              {ing.productName}{ing.isRestricted ? ' (⚠️)' : ''}{idx < meal.ingredients!.length - 1 ? ', ' : ''}
-                            </Text>
-                          ))}
-                        </Text>
-                        {meal.estimatedTotalCost && (
-                          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#059669', marginTop: 4 }}>
-                            Dự tính: {meal.estimatedTotalCost.toLocaleString('vi-VN')} đ
+          {/* Personalization Notification Banner */}
+          {searchMode === 'personal' && (
+            <Animated.View entering={FadeInDown.delay(350)} style={{ backgroundColor: '#ECFDF5', padding: 12, marginHorizontal: 20, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+              <Sparkles color="#059669" size={18} style={{ marginRight: 8 }} />
+              <Text style={{ color: '#065F46', fontSize: 12, flex: 1, fontWeight: '500' }}>
+                ✨ AI đã tự động loại bỏ các nguyên liệu bạn dị ứng và gợi ý theo đúng ngân sách, chế độ ăn của bạn!
+              </Text>
+            </Animated.View>
+          )}
+
+          {/* Smart Utilities */}
+          <Animated.View entering={FadeInRight.delay(400)}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Tiện ích thông minh</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+              {/* Personalized Meals */}
+              {userTier !== 'PREMIUM' ? (
+                <View style={[styles.smartCard, { width: width * 0.85, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }]}>
+                  <Sparkles color="#9CA3AF" size={32} style={{ marginBottom: 12 }} />
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#4B5563', marginBottom: 8 }}>Tính năng khóa</Text>
+                  <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
+                    Tiện ích cá nhân hóa đề xuất món ăn và nguyên liệu bằng AI chỉ dành cho thành viên Premium (chi tiêu trên 10,000,000đ).
+                  </Text>
+                </View>
+              ) : loadingMeals ? (
+                <View style={[styles.smartCard, { justifyContent: 'center', alignItems: 'center' }]}>
+                  <ActivityIndicator size="small" color="#059669" />
+                </View>
+              ) : meals.length > 0 ? (
+                meals.map((meal) => (
+                  <View key={meal.recipeId} style={styles.smartCard}>
+                    <View style={styles.smartCardImageWrapper}>
+                      <Image source={{ uri: meal.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop' }} style={styles.smartCardImage} />
+                      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)']} style={styles.smartCardOverlay}>
+                        <View style={styles.smartBadge}>
+                          <Zap color="white" size={10} style={{ marginRight: 4 }} />
+                          <Text style={styles.smartBadgeText} numberOfLines={1}>
+                            Khớp {meal.matchScore}%
                           </Text>
-                        )}
+                        </View>
+                        <Text style={styles.smartCardTitle} numberOfLines={1}>{fixMojibake(meal.recipeName)}</Text>
+                      </LinearGradient>
+                    </View>
+                    <View style={styles.smartCardFooter}>
+                      <Text style={styles.smartCardDesc} numberOfLines={1}>
+                        {fixMojibake(meal.matchReasons?.[0]) || `K.Phần: ${meal.yieldPortions} người • ${meal.calories ? meal.calories + ' kcal' : 'Ngon miệng'}`}
+                      </Text>
+                      {meal.ingredients && meal.ingredients.length > 0 && (
+                        <View style={{ marginBottom: 12 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 }}>Nguyên liệu cần có:</Text>
+                          <Text style={{ fontSize: 11, color: '#6B7280' }} numberOfLines={2}>
+                            {meal.ingredients.map((ing: any, idx: number) => (
+                              <Text key={idx} style={{ color: ing.isRestricted ? '#DC2626' : '#6B7280' }}>
+                                {ing.productName}{ing.isRestricted ? ' (⚠️)' : ''}{idx < meal.ingredients!.length - 1 ? ', ' : ''}
+                              </Text>
+                            ))}
+                          </Text>
+                          {meal.estimatedTotalCost && (
+                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#059669', marginTop: 4 }}>
+                              Dự tính: {meal.estimatedTotalCost.toLocaleString('vi-VN')} đ
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                      <View style={styles.smartCardActions}>
+                        <TouchableOpacity style={[styles.btnSecondary, { flex: 1, alignItems: 'center', paddingHorizontal: 4 }]} onPress={() => openRecipeAssistant(meal)}>
+                          <Text style={[styles.btnSecondaryText, { fontSize: 11 }]} numberOfLines={1}>Xem trước</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.btnPrimary, { flex: 1, flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 4 }, addingToCart && { opacity: 0.7 }]}
+                          onPress={() => handleAddMealToCart(meal)}
+                          disabled={addingToCart}
+                        >
+                          {addingToCart ? (
+                            <ActivityIndicator size="small" color="white" />
+                          ) : (
+                            <>
+                              <ShoppingCart color="white" size={12} style={{ marginRight: 2 }} />
+                              <Text style={[styles.btnPrimaryText, { fontSize: 11, flexShrink: 1 }]} numberOfLines={1}>Thêm vào giỏ</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
                       </View>
-                    )}
-                    <View style={styles.smartCardActions}>
-                      <TouchableOpacity style={[styles.btnSecondary, { flex: 1, alignItems: 'center', paddingHorizontal: 4 }]} onPress={() => openRecipeAssistant(meal)}>
-                        <Text style={[styles.btnSecondaryText, { fontSize: 11 }]} numberOfLines={1}>Xem trước</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.btnPrimary, { flex: 1, flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 4 }, addingToCart && { opacity: 0.7 }]}
-                        onPress={() => handleAddMealToCart(meal)}
-                        disabled={addingToCart}
-                      >
-                        {addingToCart ? (
-                          <ActivityIndicator size="small" color="white" />
-                        ) : (
-                          <>
-                            <ShoppingCart color="white" size={12} style={{ marginRight: 2 }} />
-                            <Text style={[styles.btnPrimaryText, { fontSize: 11, flexShrink: 1 }]} numberOfLines={1}>Thêm vào giỏ</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
                     </View>
                   </View>
+                ))
+              ) : (
+                <View style={[styles.smartCard, { width: width * 0.85, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', borderWidth: 1 }]}>
+                  <Sparkles color="#10B981" size={28} style={{ marginBottom: 10 }} />
+                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#065F46', marginBottom: 6, textAlign: 'center' }}>Gợi ý bữa ăn thông minh AI</Text>
+                  <Text style={{ fontSize: 12, color: '#047857', textAlign: 'center', marginBottom: 12 }}>
+                    Hệ thống đang sẵn sàng tạo thực đơn phù hợp nhất với ngân sách và chế độ ăn của bạn.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.btnPrimary, { paddingHorizontal: 16, paddingVertical: 8 }]}
+                    onPress={() => fetchMeals()}
+                  >
+                    <Text style={[styles.btnPrimaryText, { fontSize: 12 }]}>Tải lại gợi ý AI</Text>
+                  </TouchableOpacity>
                 </View>
-              ))
-            ) : (
-              <View style={[styles.smartCard, { width: width * 0.85, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', borderWidth: 1 }]}>
-                <Sparkles color="#10B981" size={28} style={{ marginBottom: 10 }} />
-                <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#065F46', marginBottom: 6, textAlign: 'center' }}>Gợi ý bữa ăn thông minh AI</Text>
-                <Text style={{ fontSize: 12, color: '#047857', textAlign: 'center', marginBottom: 12 }}>
-                  Hệ thống đang sẵn sàng tạo thực đơn phù hợp nhất với ngân sách và chế độ ăn của bạn.
-                </Text>
-                <TouchableOpacity 
-                  style={[styles.btnPrimary, { paddingHorizontal: 16, paddingVertical: 8 }]} 
-                  onPress={() => fetchMeals()}
-                >
-                  <Text style={[styles.btnPrimaryText, { fontSize: 12 }]}>Tải lại gợi ý AI</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+              )}
 
 
-          </ScrollView>
-        </Animated.View>
-
-        {/* Weekly Budget */}
-        <Animated.View entering={FadeInUp.delay(500)} style={styles.budgetSection}>
-          <View style={styles.budgetHeader}>
-            <View>
-              <Text style={styles.budgetTitle}>Chi tiêu tối đa</Text>
-              <Text style={styles.budgetSubtitle}>Cập nhật 5 phút trước</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.budgetValue}>
-                {spendingLimit > 0 ? `${cartTotal.toLocaleString('vi-VN')}đ / ${(spendingLimit / 1000000).toFixed(1)}tr vnđ` : 'Chưa thiết lập'}
-              </Text>
-              <View style={[styles.budgetStatusBadge, !spendingLimit && { backgroundColor: '#F3F4F6' }, isOverBudget && { backgroundColor: '#FEE2E2' }]}>
-                <Text style={[styles.budgetStatusText, !spendingLimit && { color: '#6B7280' }, isOverBudget && { color: '#DC2626' }]}>
-                  {spendingLimit > 0 ? (isOverBudget ? 'Vượt ngân sách' : 'Vẫn trong ngân sách') : 'Thiết lập ngay'}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.budgetGaugeContainer}>
-            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-              <Svg width={200} height={100} viewBox="0 0 200 100">
-                {/* Background arc */}
-                <Circle
-                  cx="100"
-                  cy="100"
-                  r="80"
-                  fill="none"
-                  stroke="#E5E7EB"
-                  strokeWidth="14"
-                  strokeLinecap="round"
-                  strokeDasharray="251 251"
-                  strokeDashoffset="0"
-                />
-                {/* Foreground arc (Dynamic) */}
-                <Circle
-                  cx="100"
-                  cy="100"
-                  r="80"
-                  fill="none"
-                  stroke={isOverBudget ? "#DC2626" : "#059669"}
-                  strokeWidth="14"
-                  strokeLinecap="round"
-                  strokeDasharray="251 251"
-                  strokeDashoffset={spendingLimit > 0 ? gaugeDashoffset : 251}
-                />
-              </Svg>
-              <View style={styles.budgetGaugeTextContainer}>
-                <Text style={[styles.budgetGaugeSpent, isOverBudget && { color: '#DC2626' }]}>{cartTotal.toLocaleString('vi-VN')}đ</Text>
-                <Text style={styles.budgetGaugeLabel}>Đã chi tiêu</Text>
-              </View>
-            </View>
-            <View style={styles.budgetGaugeDetails}>
-              <Text style={styles.budgetGaugeDetailText}>
-                Ngân sách: <Text style={{ fontWeight: '700', color: '#111827' }}>{spendingLimit > 0 ? spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa đặt'}</Text>
-              </Text>
-              <Text style={[styles.budgetGaugeDetailText, { color: isOverBudget ? '#DC2626' : '#059669', fontWeight: 'bold' }]}>
-                Còn lại: {spendingLimit > 0 ? remainingBudget.toLocaleString('vi-VN') + 'đ' : '0đ'}
-              </Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Sponsored Ads */}
-        {sponsoredAds.length > 0 && (
-          <Animated.View entering={FadeInRight.delay(550)}>
-            <View style={[styles.sectionHeader, { marginTop: 16 }]}>
-              <Text style={[styles.sectionTitle, { color: '#EAB308' }]}>Tài trợ nổi bật</Text>
-              <View style={{ backgroundColor: '#FEF08A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                <Text style={{ fontSize: 10, color: '#A16207', fontWeight: 'bold' }}>AD</Text>
-              </View>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-              {sponsoredAds.map((ad, idx) => (
-                <TouchableOpacity
-                  key={`ad-${ad.sponsoredId}-${idx}`}
-                  style={[styles.smartCard, { width: width * 0.6 }]}
-                  activeOpacity={0.9}
-                  onPress={() => router.push({ pathname: '/product', params: { id: ad.productId } })}
-                >
-                  <View style={styles.smartCardImageWrapper}>
-                    <Image source={{ uri: ad.imageUrl }} style={styles.smartCardImage} />
-                    {ad.allergyWarning && (
-                      <View style={styles.restrictedBadge}>
-                        <AlertTriangle color="white" size={12} />
-                        <Text style={styles.restrictedText}>VI PHẠM</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={[styles.smartCardFooter, { padding: 12 }]}>
-                    <Text style={[styles.smartCardTitle, { color: '#111827', fontSize: 16 }]} numberOfLines={1}>{ad.productName}</Text>
-                    <Text style={[styles.productPrice, { marginTop: 4, fontSize: 14 }]}>{ad.productPrice.toLocaleString('vi-VN')} đ</Text>
-                    {ad.allergyWarning && (
-                      <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }} numberOfLines={1}>
-                        Chứa: {ad.allergyDetails}
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
             </ScrollView>
           </Animated.View>
-        )}
 
-        {/* System Deals */}
-        {systemDeals.length > 0 && (
-          <Animated.View entering={FadeInRight.delay(580)}>
-            <View style={[styles.sectionHeader, { marginTop: 16 }]}>
-              <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>Khuyến mãi hệ thống & cá nhân</Text>
+          {/* Weekly Budget */}
+          <Animated.View entering={FadeInUp.delay(500)} style={styles.budgetSection}>
+            <View style={styles.budgetHeader}>
+              <View>
+                <Text style={styles.budgetTitle}>Chi tiêu tối đa</Text>
+                <Text style={styles.budgetSubtitle}>Cập nhật 5 phút trước</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.budgetValue}>
+                  {spendingLimit > 0 ? `${cartTotal.toLocaleString('vi-VN')}đ / ${(spendingLimit / 1000000).toFixed(1)}tr vnđ` : 'Chưa thiết lập'}
+                </Text>
+                <View style={[styles.budgetStatusBadge, !spendingLimit && { backgroundColor: '#F3F4F6' }, isOverBudget && { backgroundColor: '#FEE2E2' }]}>
+                  <Text style={[styles.budgetStatusText, !spendingLimit && { color: '#6B7280' }, isOverBudget && { color: '#DC2626' }]}>
+                    {spendingLimit > 0 ? (isOverBudget ? 'Vượt ngân sách' : 'Vẫn trong ngân sách') : 'Thiết lập ngay'}
+                  </Text>
+                </View>
+              </View>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-              {systemDeals.map((deal, idx) => (
-                <TouchableOpacity
-                  key={`deal-${deal.productId}-${idx}`}
-                  style={[styles.smartCard, { width: width * 0.45 }]}
-                  activeOpacity={0.9}
-                  onPress={() => router.push({ pathname: '/product', params: { id: deal.productId } })}
-                >
-                  <View style={styles.smartCardImageWrapper}>
-                    <Image source={{ uri: deal.imageUrl || 'https://via.placeholder.com/400x400.png?text=No+Image' }} style={styles.smartCardImage} />
-                    {deal.discountPercent ? (
-                      <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: '#eab308', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>-{deal.discountPercent}%</Text>
-                      </View>
-                    ) : null}
-                    {deal.hasAllergenConflict && (
-                      <View style={styles.restrictedBadge}>
-                        <AlertTriangle color="white" size={12} />
-                        <Text style={styles.restrictedText}>VI PHẠM</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={[styles.smartCardFooter, { padding: 12 }]}>
-                    <Text style={[styles.smartCardTitle, { color: '#111827', fontSize: 14 }]} numberOfLines={2}>{deal.productName}</Text>
-                    {deal.promotionPrice ? (
-                      <View style={{ marginTop: 4 }}>
-                        <Text style={{ fontSize: 11, color: '#6B7280', textDecorationLine: 'line-through' }}>{deal.unitPrice.toLocaleString('vi-VN')} đ</Text>
-                        <Text style={{ fontSize: 15, color: '#059669', fontWeight: 'bold' }}>{deal.promotionPrice.toLocaleString('vi-VN')} đ</Text>
-                      </View>
-                    ) : (
-                      <Text style={[styles.productPrice, { marginTop: 4, fontSize: 15 }]}>{deal.unitPrice.toLocaleString('vi-VN')} đ</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+
+            <View style={styles.budgetGaugeContainer}>
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <Svg width={200} height={100} viewBox="0 0 200 100">
+                  {/* Background arc */}
+                  <Circle
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke="#E5E7EB"
+                    strokeWidth="14"
+                    strokeLinecap="round"
+                    strokeDasharray="251 251"
+                    strokeDashoffset="0"
+                  />
+                  {/* Foreground arc (Dynamic) */}
+                  <Circle
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke={isOverBudget ? "#DC2626" : "#059669"}
+                    strokeWidth="14"
+                    strokeLinecap="round"
+                    strokeDasharray="251 251"
+                    strokeDashoffset={spendingLimit > 0 ? gaugeDashoffset : 251}
+                  />
+                </Svg>
+                <View style={styles.budgetGaugeTextContainer}>
+                  <Text style={[styles.budgetGaugeSpent, isOverBudget && { color: '#DC2626' }]}>{cartTotal.toLocaleString('vi-VN')}đ</Text>
+                  <Text style={styles.budgetGaugeLabel}>Đã chi tiêu</Text>
+                </View>
+              </View>
+              <View style={styles.budgetGaugeDetails}>
+                <Text style={styles.budgetGaugeDetailText}>
+                  Ngân sách: <Text style={{ fontWeight: '700', color: '#111827' }}>{spendingLimit > 0 ? spendingLimit.toLocaleString('vi-VN') + 'đ' : 'Chưa đặt'}</Text>
+                </Text>
+                <Text style={[styles.budgetGaugeDetailText, { color: isOverBudget ? '#DC2626' : '#059669', fontWeight: 'bold' }]}>
+                  Còn lại: {spendingLimit > 0 ? remainingBudget.toLocaleString('vi-VN') + 'đ' : '0đ'}
+                </Text>
+              </View>
+            </View>
           </Animated.View>
-        )}
 
-        {/* Promotions */}
-        <Animated.View entering={FadeInUp.delay(600)} style={styles.promoSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Sản phẩm dành cho bạn</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAllText}>Xem tất cả</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Sponsored Ads */}
+          {sponsoredAds.length > 0 && (
+            <Animated.View entering={FadeInRight.delay(550)}>
+              <View style={[styles.sectionHeader, { marginTop: 16 }]}>
+                <Text style={[styles.sectionTitle, { color: '#EAB308' }]}>Tài trợ nổi bật</Text>
+                <View style={{ backgroundColor: '#FEF08A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 10, color: '#A16207', fontWeight: 'bold' }}>AD</Text>
+                </View>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+                {sponsoredAds.map((ad, idx) => (
+                  <TouchableOpacity
+                    key={`ad-${ad.sponsoredId}-${idx}`}
+                    style={[styles.smartCard, { width: width * 0.6 }]}
+                    activeOpacity={0.9}
+                    onPress={() => router.push({ pathname: '/product', params: { id: ad.productId } })}
+                  >
+                    <View style={styles.smartCardImageWrapper}>
+                      <Image source={{ uri: ad.imageUrl }} style={styles.smartCardImage} />
+                      {ad.allergyWarning && (
+                        <View style={styles.restrictedBadge}>
+                          <AlertTriangle color="white" size={12} />
+                          <Text style={styles.restrictedText}>VI PHẠM</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={[styles.smartCardFooter, { padding: 12 }]}>
+                      <Text style={[styles.smartCardTitle, { color: '#111827', fontSize: 16 }]} numberOfLines={1}>{ad.productName}</Text>
+                      <Text style={[styles.productPrice, { marginTop: 4, fontSize: 14 }]}>{ad.productPrice.toLocaleString('vi-VN')} đ</Text>
+                      {ad.allergyWarning && (
+                        <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }} numberOfLines={1}>
+                          Chứa: {ad.allergyDetails}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          )}
 
-        </Animated.View>
+          {/* System Deals */}
+          {systemDeals.length > 0 && (
+            <Animated.View entering={FadeInRight.delay(580)}>
+              <View style={[styles.sectionHeader, { marginTop: 16 }]}>
+                <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>Khuyến mãi hệ thống & cá nhân</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+                {systemDeals.map((deal, idx) => (
+                  <TouchableOpacity
+                    key={`deal-${deal.productId}-${idx}`}
+                    style={[styles.smartCard, { width: width * 0.45 }]}
+                    activeOpacity={0.9}
+                    onPress={() => router.push({ pathname: '/product', params: { id: deal.productId } })}
+                  >
+                    <View style={styles.smartCardImageWrapper}>
+                      <Image source={{ uri: deal.imageUrl || 'https://via.placeholder.com/400x400.png?text=No+Image' }} style={styles.smartCardImage} />
+                      {deal.discountPercent ? (
+                        <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: '#eab308', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>-{deal.discountPercent}%</Text>
+                        </View>
+                      ) : null}
+                      {deal.hasAllergenConflict && (
+                        <View style={styles.restrictedBadge}>
+                          <AlertTriangle color="white" size={12} />
+                          <Text style={styles.restrictedText}>VI PHẠM</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={[styles.smartCardFooter, { padding: 12 }]}>
+                      <Text style={[styles.smartCardTitle, { color: '#111827', fontSize: 14 }]} numberOfLines={2}>{deal.productName}</Text>
+                      {deal.promotionPrice ? (
+                        <View style={{ marginTop: 4 }}>
+                          <Text style={{ fontSize: 11, color: '#6B7280', textDecorationLine: 'line-through' }}>{deal.unitPrice.toLocaleString('vi-VN')} đ</Text>
+                          <Text style={{ fontSize: 15, color: '#059669', fontWeight: 'bold' }}>{deal.promotionPrice.toLocaleString('vi-VN')} đ</Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.productPrice, { marginTop: 4, fontSize: 15 }]}>{deal.unitPrice.toLocaleString('vi-VN')} đ</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          )}
+
+          {/* Promotions */}
+          <Animated.View entering={FadeInUp.delay(600)} style={styles.promoSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Sản phẩm dành cho bạn</Text>
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/search', params: { query: '', mode: searchMode } })}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewAllText}>Xem tất cả</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
         </>}
       />
 
@@ -1062,27 +1382,76 @@ export default function HomeScreenMain() {
       </View>
 
       {/* Voice Search Modal */}
-      {isListening && (
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isListening}
+        onRequestClose={cancelListening}
+      >
         <View style={styles.voiceModalOverlay}>
           <View style={styles.voiceModalContent}>
-            <View style={{ position: 'relative', width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
+            {/* Top-Right Cancel X Button */}
+            <TouchableOpacity
+              style={{ position: 'absolute', top: 14, right: 14, padding: 8, zIndex: 99 }}
+              onPress={cancelListening}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <X color="#64748B" size={24} />
+            </TouchableOpacity>
+
+            <View style={{ position: 'relative', width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: 20, marginTop: 12 }}>
               <RNAnimated.View style={[styles.voicePulseCircle, { transform: [{ scale: pulseAnim }] }]} />
               <View style={[styles.voiceMicContainer, isTranscribing && { backgroundColor: '#F59E0B' }]}>
                 {isTranscribing ? <ActivityIndicator size="small" color="white" /> : <Mic color="white" size={32} />}
               </View>
             </View>
-            <Text style={styles.voiceListeningText}>{isTranscribing ? 'Đang phân tích AI...' : 'Đang thu âm giọng nói...'}</Text>
-            <Text style={styles.voiceResultText}>{voiceText || 'Hãy nói nội dung bạn muốn tìm kiếm (ví dụ: "Tôi muốn nấu món canh chua cá")'}</Text>
-            <TouchableOpacity 
-              style={[styles.voiceCancelBtn, isTranscribing && { opacity: 0.6 }]} 
+            <Text style={styles.voiceListeningText}>
+              {isTranscribing ? '⚡ AI đang dịch lời nói thành chữ...' : '🎙️ Đang thu âm giọng nói...'}
+            </Text>
+            <Text style={styles.voiceResultText}>
+              {voiceText || 'Hãy nói nội dung bạn muốn tìm kiếm...'}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.voiceCancelBtn, isTranscribing && { backgroundColor: '#F59E0B' }]}
               onPress={stopListening}
-              disabled={isTranscribing}
+              activeOpacity={0.7}
             >
-              <Text style={styles.voiceCancelBtnText}>{isTranscribing ? 'Đang phân tích...' : 'Dừng & Tìm kiếm'}</Text>
+              <Text style={styles.voiceCancelBtnText}>
+                {isTranscribing ? '⚡ Đang phân tích...' : 'Hoàn tất & Tìm kiếm'}
+              </Text>
             </TouchableOpacity>
+
+            {/* WebView inside Modal - rendered & visible when recording, auto-starts via onLoad */}
+            {!isVoiceAvailable() && (
+              <View style={{ width: 1, height: 1, overflow: 'hidden' }}>
+                <WebView
+                  ref={webViewRef}
+                  originWhitelist={['*']}
+                  source={{ html: AUDIO_RECORDER_HTML, baseUrl: 'https://localhost' }}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  mediaPlaybackRequiresUserAction={false}
+                  onPermissionRequest={(event: any) => {
+                    console.log('[WebView] onPermissionRequest:', event.resources);
+                    if (event.grant) event.grant(event.resources);
+                  }}
+                  onLoad={() => {
+                    console.log('[WebView] ✅ Loaded inside Modal - injecting startRecording()');
+                    setTimeout(() => {
+                      if (webViewRef.current) {
+                        webViewRef.current.injectJavaScript('startRecording(); true;');
+                      }
+                    }, 300);
+                  }}
+                  onError={(e: any) => console.error('[WebView] Error:', e.nativeEvent.description)}
+                  onMessage={handleWebViewAudioMessage}
+                />
+              </View>
+            )}
           </View>
         </View>
-      )}
+      </Modal>
 
       {/* Recipe Details & Ingredients modal ("Nấu ngay") */}
       <Modal
@@ -1175,7 +1544,9 @@ export default function HomeScreenMain() {
                           )}
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
-                          <Text style={styles.ingredientPriceText}>{(ing.unitPrice * ing.quantityRequired).toLocaleString('vi-VN')} đ</Text>
+                          <Text style={styles.ingredientPriceText}>
+                            {(ing.unitPrice * (ing.quantityRequired > 10 ? 1 : Math.max(1, Math.ceil(ing.quantityRequired || 1)))).toLocaleString('vi-VN')} đ
+                          </Text>
                           <View style={[styles.stockBadge, { backgroundColor: ing.inStock ? '#E6F4EA' : '#FCE8E6' }]}>
                             <Text style={[styles.stockBadgeText, { color: ing.inStock ? '#137333' : '#C5221F' }]}>
                               {ing.inStock ? 'Còn hàng' : 'Hết hàng'}
@@ -1223,6 +1594,8 @@ export default function HomeScreenMain() {
           </View>
         </View>
       </Modal>
+
+      {/* WebView is now placed INSIDE the Voice Modal above for reliable audio capture */}
     </SafeAreaView>
   );
 }

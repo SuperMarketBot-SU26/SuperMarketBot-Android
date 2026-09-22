@@ -255,14 +255,14 @@ function RouteSegment({ from, to, color = '#0ea5e9' }: { from: Point; to: Point;
 }
 
 const AISLE_WAYPOINTS: Record<string, Point> = {
-  '1': { x: 5.6, y: 3.0 },  // Kệ 1 -> Dưới Kệ 1 (trong Vùng Đỏ)
-  '2': { x: 6.8, y: 3.0 },  // Kệ 2 -> Trước Kệ 2 (trong Vùng Đỏ)
-  '3': { x: 6.8, y: 6.4 },  // Kệ 3 -> Trước Kệ 3 (trong Vùng Đỏ)
-  '4': { x: 5.6, y: 6.8 },  // Kệ 4 -> Trên Kệ 4 (trong Vùng Đỏ)
-  '5': { x: 2.0, y: 6.8 },  // Kệ 5 -> Trên Kệ 5 (khe giữa Kệ 6 & 5, trong Vùng Đỏ)
-  '6': { x: 3.8, y: 4.7 },  // Kệ 6 -> Phải Kệ 6 (trong Vùng Đỏ)
-  '7': { x: 2.0, y: 3.0 },  // Kệ 7 -> Dưới Kệ 7 (trong Vùng Đỏ)
-  '8': { x: 0.5, y: 3.0 },  // Cổng vào / Trạm sạc -> Ngay Cổng Vào (trong Vùng Đỏ)
+  '1': { x: 5.6, y: 3.0 },  // Kệ 1 -> Lối đi trên (dưới Kệ 1)
+  '2': { x: 7.2, y: 3.0 },  // Kệ 2 -> Lối đi phải (trước Kệ 2)
+  '3': { x: 7.2, y: 6.3 },  // Kệ 3 -> Lối đi phải (trước Kệ 3)
+  '4': { x: 5.6, y: 6.7 },  // Kệ 4 -> Lối đi dưới (trên Kệ 4)
+  '5': { x: 3.8, y: 6.7 },  // Kệ 5 -> Lối đi trung tâm (trên Kệ 5, không cắt Kệ 5)
+  '6': { x: 3.8, y: 4.7 },  // Kệ 6 -> Lối đi trung tâm (bên phải Kệ 6)
+  '7': { x: 3.8, y: 3.0 },  // Kệ 7 -> Lối đi trung tâm (dưới Kệ 7, không cắt Kệ 7)
+  '8': { x: 3.8, y: 3.0 },  // Cổng vào / Trạm sạc -> Lối đi trung tâm
 };
 
 function projectDestinationToAisle(item: GuideDestination): Point {
@@ -305,8 +305,8 @@ function projectDestinationToAisle(item: GuideDestination): Point {
   const normX = Math.max(0, Math.min(1, (x - SLAM_MIN_X) / spanX));
   const normY = Math.max(0, Math.min(1, (y - SLAM_MIN_Y) / spanY));
 
-  const projX = normX > 0.5 ? 6.8 : 3.8;
-  const projY = normY > 0.5 ? 6.8 : 3.0;
+  const projX = normX > 0.5 ? 7.2 : 3.8;
+  const projY = normY > 0.5 ? 6.7 : 3.0;
 
   return { x: projX, y: projY };
 }

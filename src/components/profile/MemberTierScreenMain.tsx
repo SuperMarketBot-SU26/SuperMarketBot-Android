@@ -157,7 +157,8 @@ export default function MemberTierScreenMain() {
             const isPremium = rawTier.toLowerCase().includes('premium');
             const userTier = isPremium ? 'Premium' : 'Medium';
             const theme = getTierTheme(profile?.membershipTier || '');
-            const effectiveSpent = isPremium ? Math.max(profile?.totalSpent || 0, 10000000) : (profile?.totalSpent || 0);
+            const rawSpent = profile?.totalSpent || 0;
+            const effectiveSpent = (isPremium && rawSpent < 10000000) ? (10000000 + rawSpent) : rawSpent;
             const progress = getProgressDetails(effectiveSpent, isPremium);
             const privileges = getTierPrivileges(profile?.membershipTier || '');
 

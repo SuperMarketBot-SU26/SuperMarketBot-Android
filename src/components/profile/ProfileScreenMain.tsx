@@ -158,7 +158,8 @@ export default function ProfileScreenMain() {
                         <Text style={{ color: theme.textColor, fontSize: 20, fontWeight: '700' }}>
                           {(() => {
                             const isPremium = (profile?.membershipTier || '').toLowerCase().includes('premium');
-                            const effectiveSpent = isPremium ? Math.max(profile?.totalSpent || 0, 10000000) : (profile?.totalSpent || 0);
+                            const rawSpent = profile?.totalSpent || 0;
+                            const effectiveSpent = (isPremium && rawSpent < 10000000) ? (10000000 + rawSpent) : rawSpent;
                             return effectiveSpent.toLocaleString('vi-VN');
                           })()}<Text style={{ fontSize: 14 }}> đ</Text>
                         </Text>

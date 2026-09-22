@@ -192,4 +192,29 @@ export class SearchService {
       return '';
     }
   }
+
+  static async transcribeAudioBase64(base64Audio: string): Promise<string> {
+    try {
+      const token = await SecureStore.getItemAsync('userToken');
+      const response = await fetch(`${BASE_URL}/api/search/speech-to-text-base64`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ audioBase64: base64Audio }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Speech-to-text base64 error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.text || '';
+    } catch (err) {
+      console.error('[SearchService.transcribeAudioBase64] Error:', err);
+      return '';
+    }
+  }
 }
