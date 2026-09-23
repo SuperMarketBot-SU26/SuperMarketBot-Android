@@ -24,8 +24,8 @@ const SLAM_MIN_Y = Number(process.env.EXPO_PUBLIC_GUIDE_MAP_MIN_Y ?? -0.3111);
 const SLAM_MAX_Y = Number(process.env.EXPO_PUBLIC_GUIDE_MAP_MAX_Y ?? 1.4755);
 
 const SHELVES = [
-  // Hàng trên (Kệ 7 Thu ngân & Kệ 1 Ăn vặt)
-  { id: 'kv7', keyLabel: 'KV7', label: 'Kệ 7\nThu ngân', x: 0.8, y: 0.6, w: 2.4, h: 1.8, fill: '#E0E7FF', stroke: '#4F46E5', text: '#312E81', icon: '🛒' },
+  // Hàng trên (Quầy Thu Ngân Node 8 & Kệ 1 Ăn vặt)
+  { id: 'kv8', keyLabel: 'KV8', label: 'Quầy\nThu ngân', x: 0.8, y: 0.6, w: 2.4, h: 1.8, fill: '#E0E7FF', stroke: '#4F46E5', text: '#312E81', icon: '🛒' },
   { id: 'kv1', keyLabel: 'KV1', label: 'Kệ 1\nĂn vặt', x: 4.4, y: 0.6, w: 2.4, h: 1.8, fill: '#FEF3C7', stroke: '#F59E0B', text: '#92400E', icon: '🍿' },
 
   // Giữa trái (Kệ 6 Gia vị & Trà)

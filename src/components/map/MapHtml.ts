@@ -241,66 +241,62 @@ export const MAP_HTML = `<!DOCTYPE html>
 
   <!-- Legend -->
   <div class="legend">
-    <div class="legend-title">ChÃº thÃ­ch</div>
+    <div class="legend-title">Chú thích khu vực</div>
     <div class="legend-item">
-      <div class="legend-swatch" style="background:#FEF3C7;border:1.5px solid #F59E0B"></div> KV3 â€” Ká»‡ VÃ ng (TrÃ¡i trÃªn)
+      <div class="legend-swatch" style="background:#EFF6FF;border:1.5px solid #3B82F6"></div> Dãy A01 — Bánh Kẹo & Nước Giải Khát
     </div>
     <div class="legend-item">
-      <div class="legend-swatch" style="background:#DBEAFE;border:1.5px solid #3B82F6"></div> KV2 â€” Ká»‡ Xanh (Pháº£i trÃªn)
+      <div class="legend-swatch" style="background:#ECFDF5;border:1.5px solid #10B981"></div> Dãy B01 — Thực Phẩm & Mì Gói
     </div>
     <div class="legend-item">
-      <div class="legend-swatch" style="background:#FFEDD5;border:1.5px solid #F97316"></div> KV1 â€” Ká»‡ Cam (Giá»¯a)
+      <div class="legend-swatch" style="background:#FFFBEB;border:1.5px solid #F59E0B"></div> Dãy C01 — Gia Dụng & Gia Vị
     </div>
     <div class="legend-item">
-      <div class="legend-swatch" style="background:#EDE9FE;border:1.5px solid #8B5CF6"></div> KV4 â€” Ká»‡ TÃ­m (TrÃ¡i dÆ°á»›i)
+      <div class="legend-swatch" style="background:#F1F5F9;border:1.5px solid #64748B"></div> Quầy Thu Ngân (POS)
     </div>
     <div class="legend-item">
-      <div class="legend-swatch" style="background:#D1FAE5;border:1.5px solid #10B981;border-radius:50%"></div> Cá»­a
-      ra/vÃ o
+      <div class="legend-swatch" style="background:#D1FAE5;border:1.5px solid #10B981;border-radius:50%"></div> Cửa Vào
     </div>
     <div class="legend-item">
-      <div class="legend-swatch" style="background:#6366F1;border:1.5px solid #4F46E5;border-radius:50%"></div> Robot
+      <div class="legend-swatch" style="background:#6366F1;border:1.5px solid #4F46E5;border-radius:50%"></div> Robot AMR
     </div>
   </div>
 
   <!-- Robot position chip -->
   <div class="robot-chip">
-    <div class="robot-chip-title">Vá»‹ trÃ­ Robot</div>
-    <div class="robot-pos">X: <span id="robot-x">â€”</span> &nbsp; Y: <span id="robot-y">â€”</span></div>
+    <div class="robot-chip-title">Vị trí Robot</div>
+    <div class="robot-pos">X: <span id="robot-x">—</span> &nbsp; Y: <span id="robot-y">—</span></div>
   </div>
 
   <script>
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ────────────────────────────────────────────────────────────────────────
     // STORE CONFIGURATION (all in "store meters")
-    // Map: 9m x 9m. (0,0) = top-left of store. X right, Y down.
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const STORE_W = 9.0;
-    const STORE_H = 9.0;
-    const WALL_T = 0.14; // wall thickness in meters
+    // Map: 3m x 3m. (0,0) = top-left of store. X right, Y down.
+    // ────────────────────────────────────────────────────────────────────────
+    const STORE_W = 3.0;
+    const STORE_H = 3.0;
+    const WALL_T = 0.08; // wall thickness in meters
 
-    // Shelves: separate H+V near corners (corner empty), KV1 center, KV4 vertical
     const SHELVES = [
-      // KV3 Amber — TOP-LEFT area (corner is EMPTY, shelves offset ~0.5m from walls)
-      { id: 'kv3-h', label: 'KV3', x: 1.2, y: 0.5, w: 2, h: 0.65, fill: '#FEF3C7', stroke: '#F59E0B', lc: '#92400E' },
-      { id: 'kv3-v', label: 'KV3', x: 0.5, y: 1.4, w: 0.65, h: 1.7, fill: '#FEF3C7', stroke: '#F59E0B', lc: '#92400E' },
+      // DÃY A01: Bánh kẹo & Nước giải khát
+      { id: 'k1', label: 'Kệ 1: Bánh Kẹo', x: 1.50, y: 0.15, w: 0.65, h: 0.36, fill: '#EFF6FF', stroke: '#3B82F6', lc: '#1D4ED8' },
+      { id: 'k2', label: 'Kệ 2: Giải Khát', x: 2.25, y: 0.15, w: 0.65, h: 0.36, fill: '#EFF6FF', stroke: '#3B82F6', lc: '#1D4ED8' },
 
-      // KV2 Blue — TOP-RIGHT area (corner is EMPTY, shelves offset ~0.5m from walls)
-      { id: 'kv2-h', label: 'KV2', x: 5.7, y: 0.5, w: 2, h: 0.65, fill: '#DBEAFE', stroke: '#3B82F6', lc: '#1E3A8A' },
-      { id: 'kv2-v', label: 'KV2', x: 7.85, y: 1.4, w: 0.65, h: 1.7, fill: '#DBEAFE', stroke: '#3B82F6', lc: '#1E3A8A' },
+      // DÃY B01: Thực phẩm tươi sống & Mì đóng gói
+      { id: 'k3', label: 'Kệ 3: Tươi Sống', x: 2.55, y: 1.10, w: 0.36, h: 0.85, fill: '#ECFDF5', stroke: '#10B981', lc: '#047857' },
+      { id: 'k4', label: 'Kệ 4: Mì Ăn Liền', x: 1.45, y: 2.48, w: 0.85, h: 0.36, fill: '#ECFDF5', stroke: '#10B981', lc: '#047857' },
 
-      // KV1 Orange — DEAD CENTER
-      { id: 'kv1-c', label: 'KV1', x: 3.5, y: 4.15, w: 2.0, h: 0.7, fill: '#FFEDD5', stroke: '#F97316', lc: '#9A3412' },
-
-      // KV4 Purple — BOTTOM-LEFT (vertical, ~1.2m gap)
-      { id: 'kv4-a', label: 'KV4', x: 0.5, y: 6.8, w: 0.7, h: 1.6, fill: '#EDE9FE', stroke: '#8B5CF6', lc: '#4C1D95' },
-      { id: 'kv4-b', label: 'KV4', x: 2.4, y: 6.8, w: 0.7, h: 1.6, fill: '#EDE9FE', stroke: '#8B5CF6', lc: '#4C1D95' },
+      // DÃY C01: Đồ gia dụng & Gia vị
+      { id: 'k5', label: 'Kệ 5: Gia Dụng', x: 0.35, y: 2.48, w: 0.85, h: 0.36, fill: '#FFFBEB', stroke: '#F59E0B', lc: '#B45309' },
+      { id: 'k6', label: 'Kệ 6: Gia Vị & Trà', x: 0.60, y: 1.10, w: 0.85, h: 0.36, fill: '#FFFBEB', stroke: '#F59E0B', lc: '#B45309' },
     ];
 
-    // Door: bottom-left of south wall
-    const DOOR = { x: 1.0, w: 1.5, wall: 'south' };
+    const CASHIER = { x: 0.08, y: 0.12, w: 0.55, h: 0.50, label: 'THU NGÂN (POS)' };
+    const DOCK = { x: 1.07, y: 0.22, r: 0.14, label: 'DOCK ⚡' };
+    const DOOR = { x: 0.0, y: 0.67, w: 0.18, h: 0.49, wall: 'west' };
 
-    // Robot initial position (starts at door)
-    let robot = { x: DOOR.x + DOOR.w / 2, y: STORE_H - 0.4 };
+    // Robot initial position (starts at Dock)
+    let robot = { x: DOCK.x, y: DOCK.y };
 
     // ————————————————————————————————————————————————————————————————————————
     // CANVAS + SCALE
@@ -397,66 +393,95 @@ export const MAP_HTML = `<!DOCTYPE html>
 
       // North wall
       ctx.fillRect(px(0), py(0), pm(STORE_W), tpx);
-      // West wall
-      ctx.fillRect(px(0), py(0), tpx, pm(STORE_H));
       // East wall
       ctx.fillRect(px(STORE_W) - tpx, py(0), tpx, pm(STORE_H));
+      // South wall (solid across bottom)
+      ctx.fillRect(px(0), py(STORE_H) - tpx, pm(STORE_W), tpx);
 
-      // South wall â€” left of door
-      ctx.fillRect(px(0), py(STORE_H) - tpx, px(DOOR.x) - px(0), tpx);
-      // South wall â€” right of door
-      const doorEnd = DOOR.x + DOOR.w;
-      ctx.fillRect(px(doorEnd), py(STORE_H) - tpx, px(STORE_W) - px(doorEnd), tpx);
+      // West wall — top segment (above door)
+      ctx.fillRect(px(0), py(0), tpx, pm(0.64));
+      // West wall — bottom segment (below door, solid past shelf 6 & 5)
+      ctx.fillRect(px(0), py(1.19), tpx, pm(STORE_H - 1.19));
     }
 
     function drawDoor() {
       const dx = px(DOOR.x);
-      const dy = py(STORE_H) - pm(WALL_T);
+      const dy = py(DOOR.y);
       const dw = pm(DOOR.w);
-      const dh = pm(WALL_T);
-      const cx = dx + dw / 2;
+      const dh = pm(DOOR.h);
 
       // Green mat fill
       ctx.fillStyle = '#D1FAE5';
       ctx.fillRect(dx, dy, dw, dh);
 
-      // Door frame pillars
+      // Door frame borders
       ctx.strokeStyle = '#10B981';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(dx, dy, dw, dh);
 
-      const pillarH = pm(0.35);
-      ctx.beginPath();
-      ctx.moveTo(dx, dy);
-      ctx.lineTo(dx, dy + dh + pillarH);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(dx + dw, dy);
-      ctx.lineTo(dx + dw, dy + dh + pillarH);
-      ctx.stroke();
-
-      // Entry arrow (pointing into store = upward)
-      const arrowTip = dy - pm(0.5);
+      // Entry arrow (pointing into store = eastward)
+      const arrowMidY = dy + dh / 2;
+      const arrowTipX = dx + dw + pm(0.22);
       ctx.strokeStyle = '#059669';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(cx, dy - pm(0.08));
-      ctx.lineTo(cx, arrowTip);
+      ctx.moveTo(dx + pm(0.04), arrowMidY);
+      ctx.lineTo(arrowTipX, arrowMidY);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(cx - pm(0.18), arrowTip + pm(0.18));
-      ctx.lineTo(cx, arrowTip);
-      ctx.lineTo(cx + pm(0.18), arrowTip + pm(0.18));
+      ctx.moveTo(arrowTipX - pm(0.08), arrowMidY - pm(0.08));
+      ctx.lineTo(arrowTipX, arrowMidY);
+      ctx.lineTo(arrowTipX - pm(0.08), arrowMidY + pm(0.08));
       ctx.stroke();
 
       // Label
       ctx.fillStyle = '#059669';
-      ctx.font = \`bold \${Math.max(9, pm(0.2))}px Plus Jakarta Sans, sans-serif\`;
+      ctx.font = \`bold \${Math.max(8, pm(0.09))}px Plus Jakarta Sans, sans-serif\`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Cá»¬A', cx, dy + dh / 2);
+      ctx.save();
+      ctx.translate(dx + dw / 2, arrowMidY);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('CỬA VÀO', 0, 0);
+      ctx.restore();
     }
 
     function drawShelves() {
+      // 1. Quầy Thu Ngân (POS)
+      const cx = px(CASHIER.x);
+      const cy = py(CASHIER.y);
+      const cw = pm(CASHIER.w);
+      const ch = pm(CASHIER.h);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.strokeStyle = '#CBD5E1';
+      ctx.lineWidth = 1.8;
+      rrect(cx, cy, cw, ch, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#334155';
+      ctx.font = \`bold \${Math.max(8, pm(0.09))}px Plus Jakarta Sans, sans-serif\`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💳 ' + CASHIER.label, cx + cw / 2, cy + ch / 2);
+
+      // 2. Trạm Sạc Robot (Dock)
+      const dkX = px(DOCK.x);
+      const dkY = py(DOCK.y);
+      const dkR = pm(DOCK.r);
+      ctx.fillStyle = '#ECFDF5';
+      ctx.strokeStyle = '#10B981';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(dkX, dkY, dkR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#047857';
+      ctx.font = \`bold \${Math.max(7, pm(0.075))}px Plus Jakarta Sans, sans-serif\`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(DOCK.label, dkX, dkY);
+
+      // 3. 6 Kệ Hàng Siêu Thị
       SHELVES.forEach(s => {
         const sx = px(s.x);
         const sy = py(s.y);
@@ -465,10 +490,10 @@ export const MAP_HTML = `<!DOCTYPE html>
         const r = 4;
 
         // Shadow
-        ctx.shadowColor = 'rgba(0,0,0,0.10)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
+        ctx.shadowColor = 'rgba(0,0,0,0.08)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
         ctx.fillStyle = s.fill;
         rrect(sx, sy, sw, sh, r);
         ctx.fill();
@@ -485,7 +510,7 @@ export const MAP_HTML = `<!DOCTYPE html>
 
         // Internal divider lines
         const isHoriz = s.w >= s.h;
-        const segments = Math.max(2, Math.round(Math.max(s.w, s.h) / 0.55));
+        const segments = Math.max(2, Math.round(Math.max(s.w, s.h) / 0.35));
         ctx.strokeStyle = s.stroke + '66';
         ctx.lineWidth = 0.8;
         for (let i = 1; i < segments; i++) {
@@ -503,7 +528,7 @@ export const MAP_HTML = `<!DOCTYPE html>
         }
 
         // Label
-        const fs = Math.max(9, Math.min(pm(0.25), 13));
+        const fs = Math.max(8, Math.min(pm(0.085), 11));
         ctx.fillStyle = s.lc;
         ctx.font = \`bold \${fs}px Plus Jakarta Sans, sans-serif\`;
         ctx.textAlign = 'center';
