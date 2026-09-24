@@ -736,7 +736,7 @@ export const MAP_HTML = `<!DOCTYPE html>
     // ————————————————————————————————————————————————————————————————————————————————
     // BACKEND CONNECTIVITY
     // ————————————————————————————————————————————————————————————————————————————————
-    const BE_URL = 'http://192.168.100.196:5000';
+    const BE_URL = 'https://smartmarketbot-api-d3achkeqhdcbfudw.southeastasia-01.azurewebsites.net';
 
     async function checkBE() {
       const pill = document.getElementById('api-status');

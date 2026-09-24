@@ -121,13 +121,9 @@ export default function MapScreenWebViewMain() {
     const locMatch = (d.shelfLocation || '').match(/Kệ\s*(\d+)/i) || (d.shelfLocation || '').match(/Slot\s*K(\d+)/i);
     if (locMatch) return `KV${locMatch[1]}`;
 
-    if (d.nodeId && Number(d.nodeId) >= 1 && Number(d.nodeId) <= 6) {
-      return `KV${d.nodeId}`;
-    }
-
     if (!d.nodeName) return '';
     const nameMatch = d.nodeName.match(/Kệ\s*(\d+)/i);
-    return nameMatch ? `KV${nameMatch[1]}` : d.nodeName;
+    return nameMatch ? `KV${nameMatch[1]}` : (d.nodeName.startsWith('KV') ? d.nodeName : '');
   }).filter(Boolean);
   const hasRoute = mapDestinations.length > 0;
 

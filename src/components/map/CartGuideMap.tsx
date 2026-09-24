@@ -53,50 +53,41 @@ function checkShelfHighlight(
   const num = getShelfNumber(shelf.id);
   const keyLabel = shelf.keyLabel.toUpperCase();
 
-  if (highlightedShelves && Array.isArray(highlightedShelves)) {
+  // 1. Ưu tiên kiểm tra danh sách highlightedShelves đã được lọc sản phẩm chuẩn
+  if (highlightedShelves && Array.isArray(highlightedShelves) && highlightedShelves.length > 0) {
     return highlightedShelves.some(item => {
       if (!item) return false;
       const upper = item.toUpperCase();
       return (
-        upper.includes(keyLabel) ||
+        upper === keyLabel ||
         upper === `KV${num}` ||
-        upper.includes(`KỆ ${num}`) ||
-        upper.includes(`KE ${num}`) ||
-        upper.includes(`KỆ${num}`) ||
-        upper.includes(`KE${num}`) ||
-        upper.includes(`K${num}_`)
+        upper === `KỆ ${num}` ||
+        upper === `KE ${num}` ||
+        upper === `KỆ${num}` ||
+        upper === `KE${num}`
       );
     });
   }
 
+  // 2. Kiểm tra từ destinations (Chỉ khi destination đó thực sự CÓ sản phẩm cần mua)
   if (destinations && destinations.length > 0) {
     return destinations.some(d => {
+      const hasProduct = d.productId || d.productName || (d.productNames && d.productNames.length > 0) || d.slotCode;
+      if (!hasProduct) return false;
+
       const nodeName = (d.nodeName || '').toUpperCase();
       const desc = (d.description || '').toUpperCase();
       const pName = (d.productName || (d.productNames && d.productNames[0]) || '').toUpperCase();
       const slotCode = (d.slotCode || '').toUpperCase();
       const shelfLoc = (d.shelfLocation || '').toUpperCase();
-      const dNodeId = String(d.nodeId ?? '');
-
-      // Check coordinate proximity if coordinates exist
-      if (d.xCoord !== undefined && d.yCoord !== undefined) {
-        const dx = Math.abs(d.xCoord - (shelf.x + shelf.w / 2));
-        const dy = Math.abs(d.yCoord - (shelf.y + shelf.h / 2));
-        if (dx <= shelf.w / 2 + 1.2 && dy <= shelf.h / 2 + 1.2) {
-          return true;
-        }
-      }
 
       return (
-        dNodeId === num ||
         slotCode.includes(`K${num}_`) ||
         slotCode.startsWith(`K${num}`) ||
         shelfLoc.includes(`KỆ ${num}`) ||
         shelfLoc.includes(`SLOT K${num}`) ||
         nodeName.includes(`KỆ ${num}`) ||
         nodeName.includes(`KE ${num}`) ||
-        nodeName.includes(`KỆ${num}`) ||
-        nodeName.includes(`KE${num}`) ||
         nodeName.includes(`KV${num}`) ||
         desc.includes(`KỆ ${num}`) ||
         desc.includes(`KE ${num}`) ||
@@ -119,15 +110,20 @@ function getShelfProducts(
   const products: string[] = [];
 
   destinations.forEach(d => {
+    const hasProduct = d.productId || d.productName || (d.productNames && d.productNames.length > 0) || d.slotCode;
+    if (!hasProduct) return;
+
     const nodeName = (d.nodeName || '').toUpperCase();
     const desc = (d.description || '').toUpperCase();
     const pName = d.productName || (d.productNames && d.productNames[0]) || d.locationName || '';
     const slotCode = (d.slotCode || '').toUpperCase();
-    const dNodeId = String(d.nodeId ?? '');
+    const shelfLoc = (d.shelfLocation || '').toUpperCase();
 
     const isMatch =
-      dNodeId === num ||
       slotCode.includes(`K${num}_`) ||
+      slotCode.startsWith(`K${num}`) ||
+      shelfLoc.includes(`KỆ ${num}`) ||
+      shelfLoc.includes(`SLOT K${num}`) ||
       nodeName.includes(`KỆ ${num}`) ||
       nodeName.includes(`KE ${num}`) ||
       nodeName.includes(`KỆ${num}`) ||

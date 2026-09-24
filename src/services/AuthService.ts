@@ -1,4 +1,4 @@
-const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://semiyearly-deloise-unsourly.ngrok-free.dev';
+const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://smartmarketbot-api-d3achkeqhdcbfudw.southeastasia-01.azurewebsites.net';
 export const BASE_URL = rawApiUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
 
 console.log('[AuthService] EXPO_PUBLIC_API_URL env =', process.env.EXPO_PUBLIC_API_URL);

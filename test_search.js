@@ -1,7 +1,7 @@
 const fetch = require('node-fetch');
 
 async function testSearch() {
-  const BASE_URL = 'http://10.0.2.2:5000';
+  const BASE_URL = 'https://smartmarketbot-api-d3achkeqhdcbfudw.southeastasia-01.azurewebsites.net';
   try {
     const url = `${BASE_URL}/api/search?q=Thịt&limit=20&sortBy=relevance&useAi=false`;
     console.log(`GET ${url}`);
